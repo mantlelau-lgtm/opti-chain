@@ -18,6 +18,7 @@ scm.db
 
 # Editor / tooling
 .claude/
+.qwen/
 .DS_Store
 .idea/
 .vscode/
