@@ -22,10 +22,18 @@ type Server struct {
 	CORSOrigin string
 }
 
+// Auth configures JWT authentication.
+type Auth struct {
+	Enabled   bool          // SCM_AUTH=off disables auth (dev only)
+	JWTSecret string        // signing key; the default is dev-only
+	TokenTTL  time.Duration // access-token lifetime
+}
+
 // Config is the top-level application configuration.
 type Config struct {
 	DB     Database
 	Server Server
+	Auth   Auth
 }
 
 // Load reads configuration from environment variables, with sane defaults
@@ -41,11 +49,22 @@ func Load() *Config {
 		dsn = getEnv("SCMDB_DSN", "scm.db")
 	}
 
+	ttlHours := getEnv("SCM_JWT_TTL", "24")
+	ttl, err := time.ParseDuration(ttlHours + "h")
+	if err != nil || ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+
 	return &Config{
 		DB: Database{Driver: drv, DSN: dsn},
 		Server: Server{
 			Addr:       getEnv("SCM_ADDR", ":8088"),
 			CORSOrigin: getEnv("SCM_CORS_ORIGIN", "*"),
+		},
+		Auth: Auth{
+			Enabled:   getEnv("SCM_AUTH", "on") != "off",
+			JWTSecret: getEnv("SCM_JWT_SECRET", "scm-dev-secret-change-me"),
+			TokenTTL:  ttl,
 		},
 	}
 }

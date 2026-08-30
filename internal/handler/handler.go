@@ -40,6 +40,14 @@ func mapErr(c *gin.Context, err error) bool {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return true
 	}
+	if errors.Is(err, service.ErrUnauthorized) {
+		response.HTTPFail(c, 401, response.ErrUnauthorized, err.Error())
+		return true
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		response.HTTPFail(c, 403, response.ErrForbidden, err.Error())
+		return true
+	}
 	if errors.Is(err, service.ErrNotFound) {
 		response.HTTPFail(c, 404, response.ErrNotFound, err.Error())
 		return true

@@ -43,8 +43,10 @@ func HTTPFail(c *gin.Context, status, code int, msg string) {
 
 // Business error codes.
 const (
-	ErrBadRequest = 40000
-	ErrNotFound   = 40400
-	ErrConflict   = 40900
-	ErrInternal   = 50000
+	ErrBadRequest   = 40000
+	ErrUnauthorized = 40100
+	ErrForbidden    = 40300
+	ErrNotFound     = 40400
+	ErrConflict     = 40900
+	ErrInternal     = 50000
 )

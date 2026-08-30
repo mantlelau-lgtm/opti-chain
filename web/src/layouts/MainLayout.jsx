@@ -1,10 +1,11 @@
-import { Layout, Menu, Typography } from 'antd'
+import { Layout, Menu, Typography, Button, Space } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
-  FundOutlined, UserOutlined, ShopOutlined,
+  FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
 } from '@ant-design/icons'
+import { auth } from '../api/client.js'
 
 const { Header, Sider, Content } = Layout
 const { Title } = Typography
@@ -51,8 +52,18 @@ export default function MainLayout() {
          />
        </Sider>
        <Layout>
-         <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center' }}>
+         <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
            <Title level={4} style={{ margin: 0 }}>轻量级供应链管理系统</Title>
+           <Space>
+             <span style={{ color: '#666' }}>{auth.user()?.name || auth.user()?.username || ''}</span>
+             <Button
+              type="link"
+              icon={<LogoutOutlined />}
+              onClick={() => { auth.clear(); nav('/login') }}
+             >
+              退出
+             </Button>
+           </Space>
          </Header>
          <Content style={{ margin: 16 }}>
            <Outlet />

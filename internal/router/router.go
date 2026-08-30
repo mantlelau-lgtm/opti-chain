@@ -11,6 +11,7 @@ import (
 
 // Handlers groups every handler the router needs.
 type Handlers struct {
+	Auth      *handler.AuthHandler
 	Base      *handler.BaseDataHandler
 	PO        *handler.PurchaseOrderHandler
 	Receiving *handler.ReceivingHandler
@@ -20,8 +21,9 @@ type Handlers struct {
 	Planning  *handler.PlanningHandler
 }
 
-// New builds a configured gin engine with all routes registered.
-func New(corsOrigin string, h *Handlers) *gin.Engine {
+// New builds a configured gin engine with all routes registered. authMW
+// protects every /api/v1 route except the public login endpoint.
+func New(corsOrigin string, h *Handlers, authMW gin.HandlerFunc) *gin.Engine {
 	g := gin.New()
 	g.Use(middleware.Recovery())
 	g.Use(gin.Logger())
@@ -29,11 +31,16 @@ func New(corsOrigin string, h *Handlers) *gin.Engine {
 
 	api := g.Group("/api/v1")
 	{
-		registerBase(api, h.Base)
-		registerProcurement(api, h.PO, h.Receiving)
-		registerSales(api, h.Sales)
-		registerInventory(api, h.Inventory, h.Stock)
-		registerPlanning(api, h.Planning)
+		api.POST("/auth/login", h.Auth.Login)
+	}
+	protected := g.Group("/api/v1")
+	protected.Use(authMW)
+	{
+		registerBase(protected, h.Base)
+		registerProcurement(protected, h.PO, h.Receiving)
+		registerSales(protected, h.Sales)
+		registerInventory(protected, h.Inventory, h.Stock)
+		registerPlanning(protected, h.Planning)
 	}
 	return g
 }

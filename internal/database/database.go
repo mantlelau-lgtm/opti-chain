@@ -68,5 +68,6 @@ func Migrate(gdb *gorm.DB) error {
 		&model.Customer{},
 		&model.SaleOrder{},
 		&model.SaleOrderDetail{},
+		&model.User{},
 	)
 }

@@ -10,6 +10,7 @@ import (
 	"scm/internal/config"
 	"scm/internal/database"
 	"scm/internal/handler"
+	"scm/internal/middleware"
 	"scm/internal/repository"
 	"scm/internal/router"
 	"scm/internal/service"
@@ -39,8 +40,13 @@ func main() {
 	mrpRepo := repository.NewMrpResultRepo(gdb)
 	customerRepo := repository.NewCustomerRepo(gdb)
 	soRepo := repository.NewSaleOrderRepo(gdb)
+	userRepo := repository.NewUserRepo(gdb)
 
 	// 3) Services (business logic).
+	authSvc := service.NewAuthService(userRepo, cfg.Auth.JWTSecret, cfg.Auth.TokenTTL, db.DB)
+	if err := authSvc.SeedAdmin(); err != nil {
+		log.Fatalf("seed admin: %v", err)
+	}
 	materialSvc := service.NewMaterialService(materialRepo)
 	supplierSvc := service.NewSupplierService(supplierRepo)
 	warehouseSvc := service.NewWarehouseService(warehouseRepo)
@@ -77,6 +83,7 @@ func main() {
 
 	// 4) Handlers (HTTP translation).
 	h := &router.Handlers{
+		Auth:      handler.NewAuthHandler(authSvc),
 		Base:      handler.NewBaseDataHandler(materialSvc, supplierSvc, warehouseSvc, locationSvc),
 		PO:        handler.NewPurchaseOrderHandler(poSvc),
 		Receiving: handler.NewReceivingHandler(receivingSvc),
@@ -87,8 +94,15 @@ func main() {
 	}
 
 	// 5) Router + start.
-	engine := router.New(cfg.Server.CORSOrigin, h)
-	log.Printf("SCM server listening on %s (driver=%s)", cfg.Server.Addr, cfg.DB.Driver)
+	authMW := middleware.Auth(cfg.Auth.Enabled, authSvc.ParseToken)
+	engine := router.New(cfg.Server.CORSOrigin, h, authMW)
+	if !cfg.Auth.Enabled {
+		log.Printf("WARNING: SCM_AUTH=off — authentication disabled (dev only)")
+	}
+	if cfg.Auth.JWTSecret == "scm-dev-secret-change-me" {
+		log.Printf("WARNING: default JWT secret in use — set SCM_JWT_SECRET in production")
+	}
+	log.Printf("SCM server listening on %s (driver=%s, auth=%v)", cfg.Server.Addr, cfg.DB.Driver, cfg.Auth.Enabled)
 	if err := engine.Run(cfg.Server.Addr); err != nil {
 		log.Fatalf("server run: %v", err)
 	}

@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
+import { auth } from './api/client.js'
 import MainLayout from './layouts/MainLayout.jsx'
+import LoginPage from './pages/LoginPage.jsx'
 import MaterialPage from './pages/MaterialPage.jsx'
 import SupplierPage from './pages/SupplierPage.jsx'
 import CustomerPage from './pages/CustomerPage.jsx'
@@ -11,12 +14,19 @@ import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
 import PlanningPage from './pages/PlanningPage.jsx'
 
+// Protected bounces anonymous visitors to /login before rendering the app.
+function Protected() {
+   if (!auth.token()) return <Navigate to="/login" replace />
+   return <MainLayout />
+}
+
 // Front-end router: one route per module, all rendered inside MainLayout.
 export default function App() {
    return (
      <BrowserRouter>
        <Routes>
-         <Route element={<MainLayout />}>
+         <Route path="/login" element={<LoginPage />} />
+         <Route element={<Protected />}>
            <Route index element={<MaterialPage />} />
            <Route path="materials" element={<MaterialPage />} />
            <Route path="suppliers" element={<SupplierPage />} />
