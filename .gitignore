@@ -1,0 +1,23 @@
+# Binaries / build output
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Local dev database (schema auto-migrates on server start)
+scm.db
+*.db-journal
+
+# Editor / tooling
+.claude/
+.DS_Store
+.idea/
+.vscode/
