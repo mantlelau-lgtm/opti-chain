@@ -28,3 +28,6 @@ scm.db
 
 # local reverse proxy config (machine-specific)
 Caddyfile
+
+# runtime logs
+logs/
