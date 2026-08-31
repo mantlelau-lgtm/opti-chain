@@ -12,6 +12,11 @@ import (
 	"scm/internal/repository"
 )
 
+// tokenVersion guards against stale tokens issued before multi-tenancy:
+// without roles/tid claims they would render the app empty (menu gating) and
+// 403 on every route, instead of cleanly bouncing to login.
+const tokenVersion = "2"
+
 // AuthService handles tenant-aware login and token issuing/parsing.
 type AuthService struct {
 	users     *repository.UserRepo
@@ -54,6 +59,7 @@ func (s *AuthService) Login(username, password, tenantCode string) (string, *mod
 		"name":     u.Name,
 		"tid":      tenant.ID,
 		"roles":    roles,
+		"ver":      tokenVersion, // reject pre-multitenancy tokens
 		"iat":      now.Unix(),
 		"exp":      now.Add(s.ttl).Unix(),
 	}
@@ -76,6 +82,9 @@ func (s *AuthService) ParseToken(token string) (*authx.Actor, error) {
 		return nil, errf(ErrUnauthorized, "invalid or expired token")
 	}
 	mc, _ := t.Claims.(jwt.MapClaims)
+	if ver, _ := mc["ver"].(string); ver != tokenVersion {
+		return nil, errf(ErrUnauthorized, "session expired, please sign in again")
+	}
 	uid, _ := mc["uid"].(float64)
 	tid, _ := mc["tid"].(float64)
 	username, _ := mc["username"].(string)
