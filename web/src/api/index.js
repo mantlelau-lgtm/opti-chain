@@ -96,6 +96,10 @@ export const supplierMaterialApi = {
   update: (id, d) => client.put(`/supplier-material/${id}`, d),
   remove: (id) => client.delete(`/supplier-material/${id}`),
 }
+export const bomOrderApi = {
+  preview: (d) => client.post('/bom-order/preview', d),
+  confirm: (d) => client.post('/bom-order/confirm', d),
+}
 
 // ---- R&D / BOM ----
 export const productApi = {

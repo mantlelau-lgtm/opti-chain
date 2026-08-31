@@ -21,6 +21,7 @@ type Handlers struct {
 	Planning  *handler.PlanningHandler
 	RND       *handler.RNDHandler
 	SupMat    *handler.SupplierMaterialHandler
+	BOMOrder  *handler.BOMOrderHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -49,6 +50,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.En
 		registerPlanning(protected, h.Planning)
 		registerRND(protected, h.RND)
 		registerSupplierMaterial(protected, h.SupMat)
+		registerBOMOrder(protected, h.BOMOrder)
 		registerRBAC(protected, h.RBAC)
 	}
 	return g
@@ -83,6 +85,11 @@ func registerSupplierMaterial(g *gin.RouterGroup, h *handler.SupplierMaterialHan
 		sm.PUT("/:id", h.Update)
 		sm.DELETE("/:id", h.Unbind)
 	}
+}
+
+func registerBOMOrder(g *gin.RouterGroup, h *handler.BOMOrderHandler) {
+	g.POST("/bom-order/preview", h.Preview)
+	g.POST("/bom-order/confirm", h.Confirm)
 }
 
 func registerRBAC(g *gin.RouterGroup, h *handler.RBACHandler) {

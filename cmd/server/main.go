@@ -101,6 +101,14 @@ func main() {
 		DB:        db.DB,
 	})
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
+	bomOrderSvc := service.NewBOMOrderService(service.BOMOrderDeps{
+		BOM:       bomRepo,
+		SupMat:    supplierMaterialRepo,
+		Suppliers: supplierRepo,
+		Materials: materialRepo,
+		POSvc:     poSvc,
+		DB:        db.DB,
+	})
 	planningSvc := service.NewPlanningService(service.PlanningDeps{
 		Demand:   demandRepo,
 		Mrp:      mrpRepo,
@@ -122,6 +130,7 @@ func main() {
 		Planning:  handler.NewPlanningHandler(planningSvc),
 		RND:       handler.NewRNDHandler(productSvc, bomSvc),
 		SupMat:    handler.NewSupplierMaterialHandler(supplierMaterialSvc),
+		BOMOrder:  handler.NewBOMOrderHandler(bomOrderSvc),
 	}
 
 	// 5) Router + start.

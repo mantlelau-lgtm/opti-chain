@@ -147,6 +147,8 @@ var routePerms = []routePerm{
 	{"GET", "/boms", "bom:view"}, {"GET", "/boms/:id", "bom:view"}, {"GET", "/boms/product/:pid", "bom:view"},
 	{"POST", "/boms", "bom:edit"}, {"PUT", "/boms/:id", "bom:edit"}, {"DELETE", "/boms/:id", "bom:edit"},
 	{"PUT", "/boms/:id/release", "bom:release"},
+	{"POST", "/bom-order/preview", "po:create"},
+	{"POST", "/bom-order/confirm", "po:create"},
 	{"GET", "/supplier-material", "supplier:view"},
 	{"POST", "/supplier-material", "supplier:manage"},
 	{"PUT", "/supplier-material/:id", "supplier:manage"},
