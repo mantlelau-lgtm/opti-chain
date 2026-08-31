@@ -60,9 +60,10 @@ func (s *PurchaseOrderService) Create(t uint, in CreatePOInput) (*model.Purchase
 		OrderDate:        in.OrderDate,
 		ExpectedDelivery: in.ExpectedDeliveryDate,
 		Status:           model.POStatusDraft,
-		CreatedBy:        in.CreatedBy,
 		TotalAmount:      decimal.Zero,
 	}
+	po.CreatedBy = in.CreatedBy
+	po.UpdatedBy = in.CreatedBy
 	for _, d := range in.Details {
 		if d.OrderQty.LessThanOrEqual(decimal.Zero) {
 			return nil, errorsBadRequest("order_qty must be positive")
@@ -116,7 +117,7 @@ func (s *PurchaseOrderService) UpdateHeader(t, id uint, in CreatePOInput) (*mode
 	}
 	cols["expected_delivery_date"] = in.ExpectedDeliveryDate
 	if in.CreatedBy != "" {
-		cols["created_by"] = in.CreatedBy
+		cols["updated_by"] = in.CreatedBy
 	}
 	if len(cols) > 0 {
 		if err := s.repo.UpdateColumns(t, id, cols); err != nil {
@@ -145,7 +146,7 @@ func (s *PurchaseOrderService) UpdateFull(t, id uint, in CreatePOInput) (*model.
 	}
 	po.ExpectedDelivery = in.ExpectedDeliveryDate
 	if in.CreatedBy != "" {
-		po.CreatedBy = in.CreatedBy
+		po.UpdatedBy = in.CreatedBy
 	}
 	po.Details = nil
 	po.TotalAmount = decimal.Zero

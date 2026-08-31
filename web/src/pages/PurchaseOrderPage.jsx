@@ -95,7 +95,6 @@ export default function PurchaseOrderPage() {
         supplier_id: record.supplier_id,
         order_date: record.order_date ? dayjs(record.order_date) : undefined,
         expected_delivery: record.expected_delivery_date ? dayjs(record.expected_delivery_date) : undefined,
-        created_by: record.created_by,
       })
      setOpen(true)
    }
@@ -109,7 +108,6 @@ export default function PurchaseOrderPage() {
             supplier_id: values.supplier_id,
             order_date: values.order_date?.format ? values.order_date.format('YYYY-MM-DD') : values.order_date,
             expected_delivery: values.expected_delivery?.format ? values.expected_delivery.format('YYYY-MM-DD') : undefined,
-            created_by: values.created_by,
           })
           message.success('已更新')
           setOpen(false)
@@ -121,7 +119,6 @@ export default function PurchaseOrderPage() {
           supplier_id: values.supplier_id,
           order_date: values.order_date?.format ? values.order_date.format('YYYY-MM-DD') : undefined,
           expected_delivery: values.expected_delivery?.format ? values.expected_delivery.format('YYYY-MM-DD') : undefined,
-          created_by: values.created_by,
           details: (values.details || []).map((d) => ({
             material_id: d.material_id,
             order_qty: String(d.order_qty),
@@ -229,6 +226,8 @@ export default function PurchaseOrderPage() {
        render: (v) => suppliers.find((s) => s.id === v)?.name || v,
      },
      { title: '下单日期', dataIndex: 'order_date', render: (v) => v ? dayjs(v).format('YYYY-MM-DD') : '-' },
+     { title: '采购员', dataIndex: 'created_by', width: 100, render: (v) => v || '-' },
+     { title: '下单时间', dataIndex: 'created_at', width: 160, render: (v) => v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-' },
      {
        title: '预计到货', dataIndex: 'expected_delivery_date',
        render: (v) => v ? dayjs(v).format('YYYY-MM-DD') : '-',
@@ -333,9 +332,6 @@ export default function PurchaseOrderPage() {
              </Form.Item>
              <Form.Item name="expected_delivery" label="预计到货">
               <DatePicker />
-             </Form.Item>
-             <Form.Item name="created_by" label="创建人">
-              <Input placeholder="可选" />
              </Form.Item>
            </Space>
            <Form.Item label="订单明细" required>

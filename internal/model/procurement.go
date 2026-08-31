@@ -24,7 +24,6 @@ type PurchaseOrder struct {
 	ExpectedDelivery *time.Time      `gorm:"column:expected_delivery_date" json:"expected_delivery_date"`
 	TotalAmount      decimal.Decimal `gorm:"column:total_amount;type:decimal(14,2);default:0" json:"total_amount"`
 	Status           string          `gorm:"column:status;size:32;default:DRAFT" json:"status"`
-	CreatedBy        string          `gorm:"column:created_by;size:64" json:"created_by"`
 
 	Details []PurchaseOrderDetail `gorm:"foreignKey:POID" json:"details,omitempty"`
 }

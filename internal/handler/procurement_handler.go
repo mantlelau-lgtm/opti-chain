@@ -23,7 +23,6 @@ type poCreateRequest struct {
 	SupplierID       uint   `json:"supplier_id"`
 	OrderDate        string `json:"order_date"`
 	ExpectedDelivery string `json:"expected_delivery"`
-	CreatedBy        string `json:"created_by"`
 	Details          []struct {
 		MaterialID uint   `json:"material_id"`
 		OrderQty   string `json:"order_qty"`
@@ -57,7 +56,7 @@ func (h *PurchaseOrderHandler) Create(c *gin.Context) {
 	in := service.CreatePOInput{
 		PONumber:   req.PONumber,
 		SupplierID: req.SupplierID,
-		CreatedBy:  req.CreatedBy,
+		CreatedBy:  actorUsername(c),
 	}
 	if req.OrderDate != "" {
 		in.OrderDate = parseTime(req.OrderDate)
@@ -96,7 +95,7 @@ func (h *PurchaseOrderHandler) Update(c *gin.Context) {
 	in := service.CreatePOInput{
 		PONumber:   req.PONumber,
 		SupplierID: req.SupplierID,
-		CreatedBy:  req.CreatedBy,
+		CreatedBy:  actorUsername(c),
 	}
 	if req.OrderDate != "" {
 		in.OrderDate = parseTime(req.OrderDate)
