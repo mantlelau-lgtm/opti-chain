@@ -6,6 +6,14 @@ import { storageApi } from '../api/index.js'
 const STATUS_LABEL = { idle: '空闲', running: '进行中', done: '完成', failed: '失败' }
 const STATUS_COLOR = { idle: 'default', running: 'processing', done: 'success', failed: 'error' }
 
+// 隐藏 DSN 中的密码，仅用于展示。
+function maskDsn(driver, dsn) {
+  if (!dsn) return '-'
+  if (driver === 'mysql') return dsn.replace(/(:\/\/|:)[^:@]+@/, '$1***@').replace(/(:\/\/|:)***@/, ':***@')
+  if (driver === 'postgres') return dsn.replace(/password=\S+/, 'password=***')
+  return dsn
+}
+
 // StoragePage (platform console): configure target data sources and migrate the
 // live database into one of them, with progress tracking. After a successful
 // migration, restart the server with the matching SCMDB_DRIVER/SCMDB_DSN env
@@ -15,13 +23,17 @@ export default function StoragePage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [progress, setProgress] = useState(null)
+  const [current, setCurrent] = useState(null)
   const timerRef = useRef(null)
 
   const load = useCallback(() => {
     storageApi.dataSources({ page: 1, size: 200 }).then((r) => setList(r.list || [])).catch(() => {})
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    storageApi.current().then((c) => setCurrent(c)).catch(() => {})
+  }, [load])
 
   const poll = useCallback(() => {
     storageApi.status().then((s) => {
@@ -76,6 +88,12 @@ export default function StoragePage() {
 
   return (
     <div>
+      {current && (
+        <Alert type="info" showIcon style={{ marginBottom: 16 }}
+          message={`当前数据源：${current.driver === 'mysql' ? 'MySQL' : current.driver === 'postgres' ? 'PostgreSQL' : current.driver}`}
+          description={maskDsn(current.driver, current.dsn)} />
+      )}
+
       <Card title="数据源配置" style={{ marginBottom: 16 }}
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); form.setFieldsValue({ driver: 'mysql' }); setOpen(true) }}>新增数据源</Button>}>
         <Table
@@ -90,11 +108,13 @@ export default function StoragePage() {
               render: (v) => <Tag color={v === 'mysql' ? 'blue' : 'purple'}>{v === 'mysql' ? 'MySQL' : 'PostgreSQL'}</Tag> },
             { title: 'DSN', dataIndex: 'dsn', ellipsis: true },
             {
-              title: '操作', key: 'action', width: 220,
+              title: '操作', key: 'action', width: 240,
               render: (_, record) => (
                 <Space>
                   <Button type="link" size="small" onClick={() => test(record)}>测试连接</Button>
-                  <Button type="link" size="small" onClick={() => migrate(record)}>一键迁移</Button>
+                  {record.driver === current?.driver
+                    ? <Tag color="green">当前类型</Tag>
+                    : <Button type="link" size="small" onClick={() => migrate(record)}>一键迁移</Button>}
                   <Popconfirm title="确认删除？" onConfirm={() => remove(record.id)}>
                     <Button type="link" danger size="small">删除</Button>
                   </Popconfirm>

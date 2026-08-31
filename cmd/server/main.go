@@ -107,7 +107,7 @@ func main() {
 	})
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
 	auditSvc := service.NewAuditService(operationLogRepo, tenantRepo)
-	storageSvc := service.NewStorageService(db.DB, dataSourceRepo)
+	storageSvc := service.NewStorageService(db.DB, dataSourceRepo, cfg.DB.Driver, cfg.DB.DSN)
 	bomOrderSvc := service.NewBOMOrderService(service.BOMOrderDeps{
 		BOM:       bomRepo,
 		SupMat:    supplierMaterialRepo,

@@ -35,14 +35,21 @@ type MigrationProgress struct {
 
 // StorageService owns data-source configuration and cross-database migration.
 type StorageService struct {
-	db    *gorm.DB // the live (source) database
-	repo  *repository.DataSourceRepo
-	mu    sync.Mutex
-	state MigrationProgress
+	db     *gorm.DB // the live (source) database
+	repo   *repository.DataSourceRepo
+	driver string // current active driver
+	dsn    string // current active dsn
+	mu     sync.Mutex
+	state  MigrationProgress
 }
 
-func NewStorageService(db *gorm.DB, repo *repository.DataSourceRepo) *StorageService {
-	return &StorageService{db: db, repo: repo, state: MigrationProgress{Status: "idle"}}
+func NewStorageService(db *gorm.DB, repo *repository.DataSourceRepo, driver, dsn string) *StorageService {
+	return &StorageService{db: db, repo: repo, driver: driver, dsn: dsn, state: MigrationProgress{Status: "idle"}}
+}
+
+// Current returns the active data-source config (driver + dsn).
+func (s *StorageService) Current() (string, string) {
+	return s.driver, s.dsn
 }
 
 // ---- data source CRUD ----

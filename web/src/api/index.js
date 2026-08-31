@@ -104,6 +104,7 @@ export const operationLogApi = {
   list: (params) => client.get('/operation-logs', { params }),
 }
 export const storageApi = {
+  current: () => client.get('/storage/current'),
   dataSources: (p) => client.get('/storage/data-sources', { params: p }),
   createDataSource: (d) => client.post('/storage/data-sources', d),
   removeDataSource: (id) => client.delete(`/storage/data-sources/${id}`),

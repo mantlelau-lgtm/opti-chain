@@ -84,6 +84,7 @@ func registerRND(g *gin.RouterGroup, h *handler.RNDHandler) {
 func registerStorage(g *gin.RouterGroup, h *handler.StorageHandler) {
 	s := g.Group("/storage")
 	{
+		s.GET("/current", h.Current)
 		s.GET("/data-sources", h.DataSourceList)
 		s.POST("/data-sources", h.DataSourceCreate)
 		s.DELETE("/data-sources/:id", h.DataSourceDelete)

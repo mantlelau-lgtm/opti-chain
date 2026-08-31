@@ -27,6 +27,14 @@ func (h *StorageHandler) requirePlatform(c *gin.Context) bool {
 	return false
 }
 
+func (h *StorageHandler) Current(c *gin.Context) {
+	if !h.requirePlatform(c) {
+		return
+	}
+	driver, dsn := h.svc.Current()
+	response.OK(c, gin.H{"driver": driver, "dsn": dsn})
+}
+
 func (h *StorageHandler) DataSourceList(c *gin.Context) {
 	if !h.requirePlatform(c) {
 		return
