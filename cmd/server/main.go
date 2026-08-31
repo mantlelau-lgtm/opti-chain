@@ -50,6 +50,7 @@ func main() {
 	bomRepo := repository.NewBOMRepo(gdb)
 	supplierMaterialRepo := repository.NewSupplierMaterialRepo(gdb)
 	operationLogRepo := repository.NewOperationLogRepo(gdb)
+	dataSourceRepo := repository.NewDataSourceRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
@@ -106,6 +107,7 @@ func main() {
 	})
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
 	auditSvc := service.NewAuditService(operationLogRepo, tenantRepo)
+	storageSvc := service.NewStorageService(db.DB, dataSourceRepo)
 	bomOrderSvc := service.NewBOMOrderService(service.BOMOrderDeps{
 		BOM:       bomRepo,
 		SupMat:    supplierMaterialRepo,
@@ -137,6 +139,7 @@ func main() {
 		SupMat:    handler.NewSupplierMaterialHandler(supplierMaterialSvc),
 		BOMOrder:  handler.NewBOMOrderHandler(bomOrderSvc),
 		AuditLog:  handler.NewOperationLogHandler(auditSvc),
+		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
 	}
 
 	// 5) Router + start.

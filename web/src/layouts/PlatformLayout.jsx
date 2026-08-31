@@ -1,6 +1,6 @@
 import { Layout, Menu, Typography, Button, Space } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CrownOutlined, SafetyOutlined, LogoutOutlined, FileSearchOutlined } from '@ant-design/icons'
+import { CrownOutlined, SafetyOutlined, LogoutOutlined, FileSearchOutlined, DatabaseOutlined } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 
 const { Header, Sider, Content } = Layout
@@ -27,6 +27,7 @@ export default function PlatformLayout() {
             { key: '/admin/tenants', icon: <CrownOutlined />, label: '租户管理' },
             { key: '/admin/roles', icon: <SafetyOutlined />, label: '角色与权限' },
             { key: '/admin/logs', icon: <FileSearchOutlined />, label: '操作日志' },
+            { key: '/admin/storage', icon: <DatabaseOutlined />, label: '存储迁移' },
           ]}
           onClick={(e) => nav(e.key)}
         />

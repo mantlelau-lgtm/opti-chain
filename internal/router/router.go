@@ -23,6 +23,7 @@ type Handlers struct {
 	SupMat    *handler.SupplierMaterialHandler
 	BOMOrder  *handler.BOMOrderHandler
 	AuditLog  *handler.OperationLogHandler
+	Storage   *handler.StorageHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -45,6 +46,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 		protected.GET("/rbac/catalog", h.RBAC.Catalog)
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		protected.GET("/operation-logs", h.AuditLog.List)
+		registerStorage(protected, h.Storage)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)
@@ -76,6 +78,18 @@ func registerRND(g *gin.RouterGroup, h *handler.RNDHandler) {
 		b.PUT("/:id", h.BOMUpdate)
 		b.PUT("/:id/release", h.BOMRelease)
 		b.DELETE("/:id", h.BOMDelete)
+	}
+}
+
+func registerStorage(g *gin.RouterGroup, h *handler.StorageHandler) {
+	s := g.Group("/storage")
+	{
+		s.GET("/data-sources", h.DataSourceList)
+		s.POST("/data-sources", h.DataSourceCreate)
+		s.DELETE("/data-sources/:id", h.DataSourceDelete)
+		s.POST("/test-connection", h.TestConnection)
+		s.POST("/migrate/:id", h.Migrate)
+		s.GET("/migrate/status", h.Status)
 	}
 }
 

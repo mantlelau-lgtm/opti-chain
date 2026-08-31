@@ -7,6 +7,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -23,6 +24,8 @@ func Open(driver, dsn string) (*DB, error) {
 	switch driver {
 	case "mysql":
 		dialector = mysql.Open(dsn)
+	case "postgres":
+		dialector = postgres.Open(dsn)
 	case "sqlite", "":
 		dialector = sqlite.Open(dsn)
 	default:
@@ -49,9 +52,9 @@ func Open(driver, dsn string) (*DB, error) {
 	return &DB{gdb}, nil
 }
 
-// Migrate creates/updates all tables defined in the model package.
-func Migrate(gdb *gorm.DB) error {
-	return gdb.AutoMigrate(
+// allModels is the single source of truth for schema + data migration.
+func allModels() []interface{} {
+	return []interface{}{
 		&model.Material{},
 		&model.Supplier{},
 		&model.Warehouse{},
@@ -81,5 +84,16 @@ func Migrate(gdb *gorm.DB) error {
 		&model.Role{},
 		&model.UserRole{},
 		&model.RolePermission{},
-	)
+		&model.DataSource{},
+	}
+}
+
+// Migrate creates/updates all tables defined in the model package.
+func Migrate(gdb *gorm.DB) error {
+	return gdb.AutoMigrate(allModels()...)
+}
+
+// Models returns the model instances used for schema + data migration.
+func Models() []interface{} {
+	return allModels()
 }

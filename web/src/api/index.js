@@ -103,6 +103,14 @@ export const bomOrderApi = {
 export const operationLogApi = {
   list: (params) => client.get('/operation-logs', { params }),
 }
+export const storageApi = {
+  dataSources: (p) => client.get('/storage/data-sources', { params: p }),
+  createDataSource: (d) => client.post('/storage/data-sources', d),
+  removeDataSource: (id) => client.delete(`/storage/data-sources/${id}`),
+  testConnection: (d) => client.post('/storage/test-connection', d),
+  migrate: (id) => client.post(`/storage/migrate/${id}`),
+  status: () => client.get('/storage/migrate/status'),
+}
 
 // ---- R&D / BOM ----
 export const productApi = {

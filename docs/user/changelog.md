@@ -1,5 +1,11 @@
 # 版本变更记录
 
+## [0.4.0] - 2026-08-31
+
+### Added
+- 存储迁移：平台控制台新增「存储迁移」——配置目标数据源（MySQL/PostgreSQL）、连接测试、一键迁移现有数据（后台异步 + 进度条），支持切换 MySQL & PostgreSQL
+- 后端新增 PostgreSQL 驱动支持（SCMDB_DRIVER=postgres）
+
 ## [0.3.7] - 2026-08-31
 
 ### Changed

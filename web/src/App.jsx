@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage.jsx'
 import TenantsPage from './pages/TenantsPage.jsx'
 import RolesPage from './pages/RolesPage.jsx'
 import OperationLogPage from './pages/OperationLogPage.jsx'
+import StoragePage from './pages/StoragePage.jsx'
 import BOMPage from './pages/BOMPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="tenants" element={<TenantsPage />} />
           <Route path="roles" element={<RolesPage />} />
           <Route path="logs" element={<OperationLogPage />} />
+          <Route path="storage" element={<StoragePage />} />
         </Route>
 
         {/* 业务系统（租户） */}
