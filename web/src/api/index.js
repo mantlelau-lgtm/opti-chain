@@ -89,6 +89,14 @@ export const soApi = {
   remove: (id) => api.remove(`/so/${id}`),
 }
 
+// ---- Supplier-Material relationships ----
+export const supplierMaterialApi = {
+  list: (params) => client.get('/supplier-material', { params }),
+  bind: (d) => client.post('/supplier-material', d),
+  update: (id, d) => client.put(`/supplier-material/${id}`, d),
+  remove: (id) => client.delete(`/supplier-material/${id}`),
+}
+
 // ---- R&D / BOM ----
 export const productApi = {
   list: (p) => api.list('/products', p),

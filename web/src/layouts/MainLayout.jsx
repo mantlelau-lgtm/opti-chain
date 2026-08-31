@@ -5,7 +5,7 @@ import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
   FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
-  SettingOutlined, ExperimentOutlined,
+  SettingOutlined, ExperimentOutlined, ApartmentOutlined,
 } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 import { authApi } from '../api/index.js'
@@ -20,6 +20,7 @@ const items = [
   { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
   { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
   { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
+  { key: '/supplier-material', icon: <ApartmentOutlined />, label: '供应关系', group: '基础数据', perm: 'supplier:view' },
   { key: '/customers', icon: <UserOutlined />, label: '客户', group: '基础数据', perm: 'customer:view' },
   { key: '/warehouses', icon: <ContainerOutlined />, label: '仓库', group: '基础数据', perm: 'warehouse:view' },
   { key: '/locations', icon: <BranchesOutlined />, label: '库位', group: '基础数据', perm: 'warehouse:view' },

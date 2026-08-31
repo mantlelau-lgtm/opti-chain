@@ -1,5 +1,6 @@
 import CrudTable from '../components/CrudTable.jsx'
 import { Button, Select, Tag, message } from 'antd'
+import { Link } from 'react-router-dom'
 import { supplierApi } from '../api/index.js'
 
 const STATUS = [{ label: '启用', value: 1 }, { label: '禁用', value: 0 }]
@@ -45,9 +46,12 @@ const resource = {
        render: () => <Select options={STATUS} /> },
      ],
   extraActions: (record, reload) => (
-    record.audit_status === 'APPROVED'
-      ? <Button type="link" size="small" onClick={() => setAudit(record, 'REJECTED', reload)}>驳回</Button>
-      : <Button type="link" size="small" onClick={() => setAudit(record, 'APPROVED', reload)}>核准</Button>
+    <>
+      <Link to={`/supplier-material?supplier_id=${record.id}`}>物料明细</Link>
+      {record.audit_status === 'APPROVED'
+        ? <Button type="link" size="small" onClick={() => setAudit(record, 'REJECTED', reload)}>驳回</Button>
+        : <Button type="link" size="small" onClick={() => setAudit(record, 'APPROVED', reload)}>核准</Button>}
+    </>
    ),
 }
 

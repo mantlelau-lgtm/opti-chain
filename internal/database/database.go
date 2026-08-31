@@ -73,6 +73,7 @@ func Migrate(gdb *gorm.DB) error {
 		&model.Product{},
 		&model.BOM{},
 		&model.BOMDetail{},
+		&model.SupplierMaterial{},
 		&model.Tenant{},
 		&model.Module{},
 		&model.Permission{},

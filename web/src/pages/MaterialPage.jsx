@@ -1,5 +1,6 @@
 import CrudTable from '../components/CrudTable.jsx'
 import { Input, InputNumber, Select, Tag } from 'antd'
+import { Link } from 'react-router-dom'
 import { materialApi } from '../api/index.js'
 
 // Material page: base-data CRUD with safety stock bounds and status.
@@ -42,6 +43,9 @@ const resource = {
      sku_code: r.sku_code, name: r.name, category: r.category, unit: r.unit,
      min_stock: Number(r.min_stock), max_stock: Number(r.max_stock), status: r.status,
     } : { status: 1, min_stock: 0, max_stock: 0 },
+  extraActions: (record) => (
+    <Link to={`/supplier-material?material_id=${record.id}`}>供应关系</Link>
+  ),
 }
 
 export default function MaterialPage() {

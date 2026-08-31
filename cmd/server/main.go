@@ -48,6 +48,7 @@ func main() {
 	userRoleRepo := repository.NewUserRoleRepo(gdb)
 	productRepo := repository.NewProductRepo(gdb)
 	bomRepo := repository.NewBOMRepo(gdb)
+	supplierMaterialRepo := repository.NewSupplierMaterialRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
@@ -99,6 +100,7 @@ func main() {
 		Materials: materialRepo,
 		DB:        db.DB,
 	})
+	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
 	planningSvc := service.NewPlanningService(service.PlanningDeps{
 		Demand:   demandRepo,
 		Mrp:      mrpRepo,
@@ -119,6 +121,7 @@ func main() {
 		Stock:     handler.NewStockHandler(stockSvc),
 		Planning:  handler.NewPlanningHandler(planningSvc),
 		RND:       handler.NewRNDHandler(productSvc, bomSvc),
+		SupMat:    handler.NewSupplierMaterialHandler(supplierMaterialSvc),
 	}
 
 	// 5) Router + start.

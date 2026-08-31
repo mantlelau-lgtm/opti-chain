@@ -5,6 +5,7 @@ import PlatformLayout from './layouts/PlatformLayout.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import MaterialPage from './pages/MaterialPage.jsx'
 import SupplierPage from './pages/SupplierPage.jsx'
+import SupplierMaterialPage from './pages/SupplierMaterialPage.jsx'
 import CustomerPage from './pages/CustomerPage.jsx'
 import WarehousePage from './pages/WarehousePage.jsx'
 import LocationPage from './pages/LocationPage.jsx'
@@ -51,6 +52,7 @@ export default function App() {
           <Route index element={<MaterialPage />} />
           <Route path="materials" element={<MaterialPage />} />
           <Route path="suppliers" element={<SupplierPage />} />
+          <Route path="supplier-material" element={<SupplierMaterialPage />} />
           <Route path="customers" element={<CustomerPage />} />
           <Route path="warehouses" element={<WarehousePage />} />
           <Route path="locations" element={<LocationPage />} />

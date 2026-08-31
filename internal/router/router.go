@@ -20,6 +20,7 @@ type Handlers struct {
 	Stock     *handler.StockHandler
 	Planning  *handler.PlanningHandler
 	RND       *handler.RNDHandler
+	SupMat    *handler.SupplierMaterialHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -47,6 +48,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.En
 		registerInventory(protected, h.Inventory, h.Stock)
 		registerPlanning(protected, h.Planning)
 		registerRND(protected, h.RND)
+		registerSupplierMaterial(protected, h.SupMat)
 		registerRBAC(protected, h.RBAC)
 	}
 	return g
@@ -70,6 +72,16 @@ func registerRND(g *gin.RouterGroup, h *handler.RNDHandler) {
 		b.PUT("/:id", h.BOMUpdate)
 		b.PUT("/:id/release", h.BOMRelease)
 		b.DELETE("/:id", h.BOMDelete)
+	}
+}
+
+func registerSupplierMaterial(g *gin.RouterGroup, h *handler.SupplierMaterialHandler) {
+	sm := g.Group("/supplier-material")
+	{
+		sm.GET("", h.List)
+		sm.POST("", h.Bind)
+		sm.PUT("/:id", h.Update)
+		sm.DELETE("/:id", h.Unbind)
 	}
 }
 
