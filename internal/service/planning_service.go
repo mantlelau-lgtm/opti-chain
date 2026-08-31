@@ -48,33 +48,34 @@ func NewPlanningService(d PlanningDeps) *PlanningService {
 
 // ---- Demand CRUD ----
 
-// Create persists a demand and returns it.
-func (s *PlanningService) CreateDemand(d *model.Demand) error {
+// CreateDemand persists a demand within the tenant.
+func (s *PlanningService) CreateDemand(t uint, d *model.Demand) error {
 	if d.MaterialID == 0 || d.DemandQty.LessThanOrEqual(decimal.Zero) {
 		return errorsBadRequest("material_id and positive demand_qty are required")
 	}
-	return s.demand.Create(d)
+	return s.demand.Create(t, d)
 }
 
-func (s *PlanningService) UpdateDemand(id uint, d *model.Demand) error {
+func (s *PlanningService) UpdateDemand(t, id uint, d *model.Demand) error {
 	d.ID = id
-	return s.demand.Update(d)
+	return s.demand.Update(t, d)
 }
 
-func (s *PlanningService) GetDemand(id uint) (*model.Demand, error) {
-	return s.demand.Get(id)
+func (s *PlanningService) GetDemand(t, id uint) (*model.Demand, error) {
+	return s.demand.Get(t, id)
 }
 
-func (s *PlanningService) DeleteDemand(id uint) error {
-	return s.demand.Delete(id)
+func (s *PlanningService) DeleteDemand(t, id uint) error {
+	return s.demand.Delete(t, id)
 }
 
-func (s *PlanningService) ListDemands(in PageInput) ([]model.Demand, int64, error) {
+func (s *PlanningService) ListDemands(t uint, in PageInput) ([]model.Demand, int64, error) {
 	var (
 		out   []model.Demand
 		total int64
 	)
-	if err := s.demand.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.demand.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -82,7 +83,7 @@ func (s *PlanningService) ListDemands(in PageInput) ([]model.Demand, int64, erro
 
 // ---- MRP ----
 
-// ComputeMRP runs a lightweight material-requirements calculation.
+// ComputeMRP runs a lightweight material-requirements calculation per tenant.
 //
 // For each open demand it aggregates gross demand by material, then computes:
 //
@@ -90,9 +91,9 @@ func (s *PlanningService) ListDemands(in PageInput) ([]model.Demand, int64, erro
 //
 // A suggested purchase order is produced only when the result is positive. The
 // results are persisted as a new MRP batch.
-func (s *PlanningService) ComputeMRP(batchNo string) ([]model.MrpResult, error) {
+func (s *PlanningService) ComputeMRP(t uint, batchNo string) ([]model.MrpResult, error) {
 	// 1) aggregate open demand per material.
-	byMat, err := s.demand.SumOpenByMaterial()
+	byMat, err := s.demand.SumOpenByMaterial(t)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +107,7 @@ func (s *PlanningService) ComputeMRP(batchNo string) ([]model.MrpResult, error) 
 		ids = append(ids, matID)
 	}
 	var mats []model.Material
-	if err := s.db.Where("id IN ?", ids).Find(&mats).Error; err != nil {
+	if err := s.db.Where("tenant_id = ? AND id IN ?", t, ids).Find(&mats).Error; err != nil {
 		return nil, err
 	}
 	minStock := make(map[uint]decimal.Decimal, len(mats))
@@ -118,14 +119,14 @@ func (s *PlanningService) ComputeMRP(batchNo string) ([]model.MrpResult, error) 
 	for matID, gross := range byMat {
 		grossD := decimal.NewFromFloat(gross)
 
-		// current on-hand across all warehouses/locations.
-		current, err := s.stock.SumByMaterial(matID)
+		// current on-hand across all warehouses/locations of the tenant.
+		current, err := s.stock.SumByMaterial(t, matID)
 		if err != nil {
 			return nil, err
 		}
 
 		// on-order = open purchase order qty not yet received.
-		onOrder, err := s.sumOnOrder(matID)
+		onOrder, err := s.sumOnOrder(t, matID)
 		if err != nil {
 			return nil, err
 		}
@@ -149,11 +150,11 @@ func (s *PlanningService) ComputeMRP(batchNo string) ([]model.MrpResult, error) 
 		})
 	}
 
-	if err := s.mrp.BatchCreate(results); err != nil {
+	if err := s.mrp.BatchCreate(t, results); err != nil {
 		return nil, err
 	}
 	// mark processed demands as generated.
-	_ = s.db.Model(&model.Demand{}).Where("status = ?", model.DemandStatusOpen).
+	_ = s.db.Model(&model.Demand{}).Where("tenant_id = ? AND status = ?", t, model.DemandStatusOpen).
 		Update("status", model.DemandStatusGenerated).Error
 
 	return results, nil
@@ -162,15 +163,15 @@ func (s *PlanningService) ComputeMRP(batchNo string) ([]model.MrpResult, error) 
 // sumOnOrder returns the not-yet-received qty of open POs for a material:
 //
 //	sum(order_qty - received_qty) for active (non-cancelled/completed) POs.
-func (s *PlanningService) sumOnOrder(matID uint) (decimal.Decimal, error) {
+func (s *PlanningService) sumOnOrder(t, matID uint) (decimal.Decimal, error) {
 	var res struct {
 		Qty decimal.Decimal
 	}
 	err := s.db.Raw(
 		"SELECT COALESCE(SUM(d.order_qty - d.received_qty), 0) AS qty FROM pur_order_detail d "+
 			"JOIN pur_order p ON p.id = d.po_id "+
-			"WHERE d.material_id = ? AND p.status NOT IN ('CANCELLED','COMPLETED')",
-		matID,
+			"WHERE p.tenant_id = ? AND d.material_id = ? AND p.status NOT IN ('CANCELLED','COMPLETED')",
+		t, matID,
 	).Scan(&res).Error
 	if err != nil {
 		return decimal.Zero, err
@@ -178,24 +179,25 @@ func (s *PlanningService) sumOnOrder(matID uint) (decimal.Decimal, error) {
 	return res.Qty, nil
 }
 
-// ListMrp returns paginated MRP results.
-func (s *PlanningService) ListMrp(in PageInput) ([]model.MrpResult, int64, error) {
+// ListMrp returns paginated MRP results within the tenant.
+func (s *PlanningService) ListMrp(t uint, in PageInput) ([]model.MrpResult, int64, error) {
 	var (
 		out   []model.MrpResult
 		total int64
 	)
-	if err := s.mrp.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.mrp.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
 }
 
-func (s *PlanningService) GetMrp(id uint) (*model.MrpResult, error) {
-	return s.mrp.Get(id)
+func (s *PlanningService) GetMrp(t, id uint) (*model.MrpResult, error) {
+	return s.mrp.Get(t, id)
 }
 
-func (s *PlanningService) DeleteMrp(id uint) error {
-	return s.mrp.Delete(id)
+func (s *PlanningService) DeleteMrp(t, id uint) error {
+	return s.mrp.Delete(t, id)
 }
 
 // ConvertMRP turns a single MRP result into a purchase order.
@@ -204,8 +206,8 @@ func (s *PlanningService) DeleteMrp(id uint) error {
 // PO number defaults to "MRP-<mrpNumber>-<materialID>" and can be overridden.
 // The MRP result is then flipped to CONVERTED to record that the suggestion has
 // been actioned, so it is not converted twice.
-func (s *PlanningService) ConvertMRP(mrpID uint, poNumber string) (*model.PurchaseOrder, error) {
-	mrp, err := s.mrp.Get(mrpID)
+func (s *PlanningService) ConvertMRP(t, mrpID uint, poNumber string) (*model.PurchaseOrder, error) {
+	mrp, err := s.mrp.Get(t, mrpID)
 	if mrp == nil || err != nil {
 		return nil, errNotFound(mrpID)
 	}
@@ -219,7 +221,7 @@ func (s *PlanningService) ConvertMRP(mrpID uint, poNumber string) (*model.Purcha
 	// A PO must reference a supplier; pick any enabled one, preferring the first.
 	var supplierID uint
 	var suppliers []model.Supplier
-	_ = s.supplier.List(repository.ListFilter{Page: query.Page{Page: 1, Size: 1}}, &suppliers, nil)
+	_ = s.supplier.List(repository.ListFilter{Page: query.Page{Page: 1, Size: 1}, Tenant: t}, &suppliers, nil)
 	if len(suppliers) > 0 {
 		supplierID = suppliers[0].ID
 	}
@@ -232,7 +234,7 @@ func (s *PlanningService) ConvertMRP(mrpID uint, poNumber string) (*model.Purcha
 		number = "MRP-" + mrp.MrpNumber + "-" + itob(mrp.MaterialID)
 	}
 
-	po, err := s.posvc.Create(CreatePOInput{
+	po, err := s.posvc.Create(t, CreatePOInput{
 		PONumber:   number,
 		SupplierID: supplierID,
 		OrderDate:  time.Now(),
@@ -244,7 +246,7 @@ func (s *PlanningService) ConvertMRP(mrpID uint, poNumber string) (*model.Purcha
 
 	// Mark the suggestion as actioned.
 	mrp.Status = model.MrpStatusConverted
-	if err := s.mrp.Update(mrp); err != nil {
+	if err := s.mrp.Update(t, mrp); err != nil {
 		return nil, err
 	}
 	return po, nil

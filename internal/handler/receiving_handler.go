@@ -57,7 +57,7 @@ func (h *ReceivingHandler) Receive(c *gin.Context) {
 			RejectReason: d.RejectReason,
 		})
 	}
-	rc, err := h.svc.Receive(idParam(c), in)
+	rc, err := h.svc.Receive(tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -66,7 +66,7 @@ func (h *ReceivingHandler) Receive(c *gin.Context) {
 
 // Receipts lists the receiving rounds of a PO.
 func (h *ReceivingHandler) Receipts(c *gin.Context) {
-	list, err := h.svc.ListReceipts(idParam(c))
+	list, err := h.svc.ListReceipts(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}

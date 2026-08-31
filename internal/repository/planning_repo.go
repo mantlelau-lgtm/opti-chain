@@ -7,25 +7,26 @@ import (
 )
 
 // DemandRepo owns plan_demand.
-type DemandRepo struct{ *genericRepo[model.Demand] }
+type DemandRepo struct{ *tenantRepo[model.Demand] }
 
 func NewDemandRepo(db *gormDB) *DemandRepo {
-	return &DemandRepo{genericRepo: newGenericRepo[model.Demand](db)}
+	return &DemandRepo{tenantRepo: newTenantRepo[model.Demand](db)}
 }
 
 func (r *DemandRepo) List(f ListFilter, out *[]model.Demand, total *int64) error {
-	return r.list(f, func(q *gorm.DB) *gorm.DB { return q.Order("id DESC") }, out, total)
+	return r.listT(f, func(q *gorm.DB) *gorm.DB { return q.Order("id DESC") }, out, total)
 }
 
-// SumOpenByMaterial returns total open demand qty per material (map mat->qty).
-func (r *DemandRepo) SumOpenByMaterial() (map[uint]float64, error) {
+// SumOpenByMaterial returns total open demand qty per material (map mat->qty)
+// within one tenant.
+func (r *DemandRepo) SumOpenByMaterial(t uint) (map[uint]float64, error) {
 	type row struct {
 		MaterialID uint    `gorm:"column:material_id"`
 		Qty        float64 `gorm:"column:qty"`
 	}
 	var rows []row
 	err := r.db.DB.Model(&model.Demand{}).
-		Where("status = ?", model.DemandStatusOpen).
+		Where("tenant_id = ? AND status = ?", t, model.DemandStatusOpen).
 		Select("material_id, COALESCE(SUM(demand_qty),0) AS qty").
 		Group("material_id").Scan(&rows).Error
 	m := make(map[uint]float64, len(rows))
@@ -36,17 +37,21 @@ func (r *DemandRepo) SumOpenByMaterial() (map[uint]float64, error) {
 }
 
 // MrpResultRepo owns plan_mrp_result.
-type MrpResultRepo struct{ *genericRepo[model.MrpResult] }
+type MrpResultRepo struct{ *tenantRepo[model.MrpResult] }
 
 func NewMrpResultRepo(db *gormDB) *MrpResultRepo {
-	return &MrpResultRepo{genericRepo: newGenericRepo[model.MrpResult](db)}
+	return &MrpResultRepo{tenantRepo: newTenantRepo[model.MrpResult](db)}
 }
 
 func (r *MrpResultRepo) List(f ListFilter, out *[]model.MrpResult, total *int64) error {
-	return r.list(f, func(q *gorm.DB) *gorm.DB { return q.Order("id DESC") }, out, total)
+	return r.listT(f, func(q *gorm.DB) *gorm.DB { return q.Order("id DESC") }, out, total)
 }
 
-func (r *MrpResultRepo) BatchCreate(list []model.MrpResult) error {
+// BatchCreate stamps the tenant and inserts a computation batch.
+func (r *MrpResultRepo) BatchCreate(t uint, list []model.MrpResult) error {
+	for i := range list {
+		list[i].TenantID = t
+	}
 	if len(list) == 0 {
 		return nil
 	}

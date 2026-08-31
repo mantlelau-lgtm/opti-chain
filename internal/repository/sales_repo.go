@@ -8,10 +8,10 @@ import (
 )
 
 // CustomerRepo owns base_customer.
-type CustomerRepo struct{ *genericRepo[model.Customer] }
+type CustomerRepo struct{ *tenantRepo[model.Customer] }
 
 func NewCustomerRepo(db *gormDB) *CustomerRepo {
-	return &CustomerRepo{genericRepo: newGenericRepo[model.Customer](db)}
+	return &CustomerRepo{tenantRepo: newTenantRepo[model.Customer](db)}
 }
 
 func (r *CustomerRepo) List(f ListFilter, out *[]model.Customer, total *int64) error {
@@ -22,26 +22,26 @@ func (r *CustomerRepo) List(f ListFilter, out *[]model.Customer, total *int64) e
 		}
 		return q.Order("id DESC")
 	}
-	return r.list(f, apply, out, total)
+	return r.listT(f, apply, out, total)
 }
 
 // SaleOrderRepo owns sale_order + sale_order_detail.
 type SaleOrderRepo struct {
-	*genericRepo[model.SaleOrder]
+	*tenantRepo[model.SaleOrder]
 	db *gormDB
 }
 
 func NewSaleOrderRepo(db *gormDB) *SaleOrderRepo {
 	return &SaleOrderRepo{
-		genericRepo: newGenericRepo[model.SaleOrder](db),
-		db:          db,
+		tenantRepo: newTenantRepo[model.SaleOrder](db),
+		db:         db,
 	}
 }
 
-// GetWithDetails loads an SO with its details preloaded.
-func (r *SaleOrderRepo) GetWithDetails(id uint) (*model.SaleOrder, error) {
+// GetWithDetails loads an SO with its details preloaded, scoped to a tenant.
+func (r *SaleOrderRepo) GetWithDetails(t, id uint) (*model.SaleOrder, error) {
 	var so model.SaleOrder
-	if err := r.db.DB.Preload("Details").First(&so, id).Error; err != nil {
+	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&so, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
@@ -53,7 +53,8 @@ func (r *SaleOrderRepo) GetWithDetails(id uint) (*model.SaleOrder, error) {
 // CreateWithDetails inserts an SO and its details in one transaction. The
 // header is created with associations omitted so the explicit detail loop
 // stays the single writer.
-func (r *SaleOrderRepo) CreateWithDetails(so *model.SaleOrder) error {
+func (r *SaleOrderRepo) CreateWithDetails(t uint, so *model.SaleOrder) error {
+	so.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(so).Error; err != nil {
 			return err
@@ -76,5 +77,5 @@ func (r *SaleOrderRepo) List(f ListFilter, out *[]model.SaleOrder, total *int64)
 		}
 		return q.Order("id DESC")
 	}
-	return r.list(f, apply, out, total)
+	return r.listT(f, apply, out, total)
 }

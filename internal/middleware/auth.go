@@ -39,3 +39,25 @@ func unauthorized(c *gin.Context) {
 	response.HTTPFail(c, http.StatusUnauthorized, response.ErrUnauthorized, "authentication required")
 	c.Abort()
 }
+
+// RequirePerm enforces the DB-catalogued permission for the matched route.
+// Routes without a binding only require authentication.
+func RequirePerm(enabled bool, check func(*authx.Actor, string, string) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !enabled {
+			c.Next()
+			return
+		}
+		a := authx.GetActor(c)
+		if a == nil {
+			unauthorized(c)
+			return
+		}
+		if err := check(a, c.Request.Method, c.Request.URL.Path); err != nil {
+			response.HTTPFail(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}

@@ -9,7 +9,8 @@ import (
 	"scm/internal/repository"
 )
 
-// PurchaseOrderService owns purchase-order lifecycle logic.
+// PurchaseOrderService owns purchase-order lifecycle logic. Every method
+// takes the tenant id first (threaded from the authenticated Actor).
 type PurchaseOrderService struct {
 	repo      *repository.PurchaseOrderRepo
 	suppliers *repository.SupplierRepo
@@ -38,12 +39,12 @@ type PODetailInput struct {
 }
 
 // Create validates a PO, computes line/total amounts and persists it. The
-// supplier must exist and be approved (SOP 准入管控).
-func (s *PurchaseOrderService) Create(in CreatePOInput) (*model.PurchaseOrder, error) {
+// supplier must exist (same tenant) and be approved (SOP 准入管控).
+func (s *PurchaseOrderService) Create(t uint, in CreatePOInput) (*model.PurchaseOrder, error) {
 	if in.SupplierID == 0 || len(in.Details) == 0 {
 		return nil, errorsBadRequest("supplier_id and at least one detail are required")
 	}
-	supplier, err := s.suppliers.Get(in.SupplierID)
+	supplier, err := s.suppliers.Get(t, in.SupplierID)
 	if supplier == nil {
 		return nil, errNotFound(in.SupplierID)
 	}
@@ -76,23 +77,17 @@ func (s *PurchaseOrderService) Create(in CreatePOInput) (*model.PurchaseOrder, e
 		})
 		po.TotalAmount = po.TotalAmount.Add(lineTotal)
 	}
-	if err := s.repo.CreateWithDetails(po); err != nil {
+	if err := s.repo.CreateWithDetails(t, po); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(po.ID)
-}
-
-// Update replaces a PO header (status transitions handled separately).
-func (s *PurchaseOrderService) Update(id uint, po *model.PurchaseOrder) error {
-	po.ID = id
-	return s.repo.Update(po)
+	return s.repo.GetWithDetails(t, po.ID)
 }
 
 // UpdateHeader edits only the header fields supplied by the caller; details,
 // totals, status and received progress are never touched (so editing a
 // partially received PO cannot wipe its fulfillment state).
-func (s *PurchaseOrderService) UpdateHeader(id uint, in CreatePOInput) (*model.PurchaseOrder, error) {
-	po, err := s.repo.Get(id)
+func (s *PurchaseOrderService) UpdateHeader(t, id uint, in CreatePOInput) (*model.PurchaseOrder, error) {
+	po, err := s.repo.Get(t, id)
 	if po == nil {
 		return nil, errNotFound(id)
 	}
@@ -104,7 +99,7 @@ func (s *PurchaseOrderService) UpdateHeader(id uint, in CreatePOInput) (*model.P
 		cols["po_number"] = in.PONumber
 	}
 	if in.SupplierID != 0 && in.SupplierID != po.SupplierID {
-		supplier, err := s.suppliers.Get(in.SupplierID)
+		supplier, err := s.suppliers.Get(t, in.SupplierID)
 		if supplier == nil {
 			return nil, errNotFound(in.SupplierID)
 		}
@@ -124,18 +119,18 @@ func (s *PurchaseOrderService) UpdateHeader(id uint, in CreatePOInput) (*model.P
 		cols["created_by"] = in.CreatedBy
 	}
 	if len(cols) > 0 {
-		if err := s.repo.UpdateColumns(id, cols); err != nil {
+		if err := s.repo.UpdateColumns(t, id, cols); err != nil {
 			return nil, err
 		}
 	}
-	return s.repo.GetWithDetails(id)
+	return s.repo.GetWithDetails(t, id)
 }
 
 // UpdateFull replaces both the header and the detail lines of an existing PO,
 // recomputing line totals and the grand total. It is the "edit existing PO"
 // counterpart to Create.
-func (s *PurchaseOrderService) UpdateFull(id uint, in CreatePOInput) (*model.PurchaseOrder, error) {
-	po, err := s.repo.GetWithDetails(id)
+func (s *PurchaseOrderService) UpdateFull(t, id uint, in CreatePOInput) (*model.PurchaseOrder, error) {
+	po, err := s.repo.GetWithDetails(t, id)
 	if po == nil || err != nil {
 		return nil, errNotFound(id)
 	}
@@ -169,37 +164,38 @@ func (s *PurchaseOrderService) UpdateFull(id uint, in CreatePOInput) (*model.Pur
 		})
 		po.TotalAmount = po.TotalAmount.Add(lineTotal)
 	}
-	if err := s.repo.UpdateWithDetails(po); err != nil {
+	if err := s.repo.UpdateWithDetails(t, po); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(id)
+	return s.repo.GetWithDetails(t, id)
 }
 
 // Get loads a PO with details.
-func (s *PurchaseOrderService) Get(id uint) (*model.PurchaseOrder, error) {
-	return s.repo.GetWithDetails(id)
+func (s *PurchaseOrderService) Get(t, id uint) (*model.PurchaseOrder, error) {
+	return s.repo.GetWithDetails(t, id)
 }
 
 // Delete removes a PO.
-func (s *PurchaseOrderService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *PurchaseOrderService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-// List returns a paginated PO list.
-func (s *PurchaseOrderService) List(in PageInput) ([]model.PurchaseOrder, int64, error) {
+// List returns a paginated PO list within the tenant.
+func (s *PurchaseOrderService) List(t uint, in PageInput) ([]model.PurchaseOrder, int64, error) {
 	var (
 		out   []model.PurchaseOrder
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
 }
 
 // SetStatus transitions a PO to a new status.
-func (s *PurchaseOrderService) SetStatus(id uint, status string) error {
-	po, err := s.repo.Get(id)
+func (s *PurchaseOrderService) SetStatus(t, id uint, status string) error {
+	po, err := s.repo.Get(t, id)
 	if po == nil {
 		return errNotFound(id)
 	}
@@ -207,5 +203,5 @@ func (s *PurchaseOrderService) SetStatus(id uint, status string) error {
 		return err
 	}
 	po.Status = status
-	return s.repo.Update(po)
+	return s.repo.Update(t, po)
 }

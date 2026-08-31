@@ -15,7 +15,7 @@ func NewStockHandler(svc *service.StockService) *StockHandler {
 }
 
 func (h *StockHandler) List(c *gin.Context) {
-	list, total, err := h.svc.List(parsePage(c))
+	list, total, err := h.svc.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}

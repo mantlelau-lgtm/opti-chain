@@ -44,6 +44,7 @@ func Open(driver, dsn string) (*DB, error) {
 	if err := Migrate(gdb); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	MigrateTenantIndexes(gdb, driver)
 
 	return &DB{gdb}, nil
 }
@@ -69,5 +70,11 @@ func Migrate(gdb *gorm.DB) error {
 		&model.SaleOrder{},
 		&model.SaleOrderDetail{},
 		&model.User{},
+		&model.Tenant{},
+		&model.Module{},
+		&model.Permission{},
+		&model.Role{},
+		&model.UserRole{},
+		&model.RolePermission{},
 	)
 }

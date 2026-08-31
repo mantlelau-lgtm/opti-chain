@@ -9,20 +9,28 @@ const client = axios.create({
 
 const TOKEN_KEY = 'scm_token'
 const USER_KEY = 'scm_user'
+const PERMS_KEY = 'scm_perms'
 
-// auth persists the JWT + a safe user view in localStorage.
+// auth persists the JWT, a safe user view and the permission codes (menu
+// gating) in localStorage.
 export const auth = {
   token: () => localStorage.getItem(TOKEN_KEY),
   user: () => {
     try { return JSON.parse(localStorage.getItem(USER_KEY)) } catch { return null }
   },
-  save: (token, user) => {
+  perms: () => {
+    try { return JSON.parse(localStorage.getItem(PERMS_KEY)) || [] } catch { return [] }
+  },
+  save: (token, user, perms = []) => {
     localStorage.setItem(TOKEN_KEY, token)
     localStorage.setItem(USER_KEY, JSON.stringify(user))
+    localStorage.setItem(PERMS_KEY, JSON.stringify(perms))
   },
+  setPerms: (perms) => localStorage.setItem(PERMS_KEY, JSON.stringify(perms)),
   clear: () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(PERMS_KEY)
   },
 }
 

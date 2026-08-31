@@ -6,70 +6,62 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"scm/internal/model"
 	"scm/internal/pkg/authx"
 	"scm/internal/repository"
 )
 
-// AuthService handles login, token issuing/parsing and the bootstrap admin.
+// AuthService handles tenant-aware login and token issuing/parsing.
 type AuthService struct {
-	users  *repository.UserRepo
-	secret string
-	ttl    time.Duration
-	db     *gorm.DB
+	users     *repository.UserRepo
+	tenants   *repository.TenantRepo
+	userRoles *repository.UserRoleRepo
+	secret    string
+	ttl       time.Duration
 }
 
-func NewAuthService(users *repository.UserRepo, secret string, ttl time.Duration, db *gorm.DB) *AuthService {
-	return &AuthService{users: users, secret: secret, ttl: ttl, db: db}
+func NewAuthService(users *repository.UserRepo, tenants *repository.TenantRepo, userRoles *repository.UserRoleRepo, secret string, ttl time.Duration) *AuthService {
+	return &AuthService{users: users, tenants: tenants, userRoles: userRoles, secret: secret, ttl: ttl}
 }
 
-// SeedAdmin creates the default admin (admin/admin123) when the user table is
-// empty, so a fresh deployment is immediately usable.
-func (s *AuthService) SeedAdmin() error {
-	var count int64
-	if err := s.db.Model(&model.User{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+// Login verifies tenant + credentials and issues a signed HS256 token whose
+// claims carry the tenant id and role codes.
+func (s *AuthService) Login(username, password, tenantCode string) (string, *model.User, []string, error) {
+	tenant, err := s.tenants.GetByCode(tenantCode)
 	if err != nil {
-		return err
+		return "", nil, nil, err
 	}
-	return s.users.Create(&model.User{
-		Username:     "admin",
-		PasswordHash: string(hash),
-		Name:         "管理员",
-		Status:       1,
-	})
-}
-
-// Login verifies credentials and issues a signed HS256 token.
-func (s *AuthService) Login(username, password string) (string, *model.User, error) {
-	u, err := s.users.GetByUsername(username)
+	if tenant == nil || tenant.Status != model.TenantActive {
+		return "", nil, nil, errf(ErrUnauthorized, "invalid tenant or tenant suspended")
+	}
+	u, err := s.users.GetByTenantUsername(tenant.ID, username)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if u == nil || u.Status != 1 ||
 		bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
-		return "", nil, errf(ErrUnauthorized, "invalid username or password")
+		return "", nil, nil, errf(ErrUnauthorized, "invalid username or password")
+	}
+	roles, err := s.userRoles.RoleCodesForUser(u.ID)
+	if err != nil {
+		return "", nil, nil, err
 	}
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"uid":      u.ID,
 		"username": u.Username,
 		"name":     u.Name,
+		"tid":      tenant.ID,
+		"roles":    roles,
 		"iat":      now.Unix(),
 		"exp":      now.Add(s.ttl).Unix(),
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.secret))
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
-	return token, u, nil
+	return token, u, roles, nil
 }
 
 // ParseToken validates a bearer token and extracts the actor.
@@ -85,7 +77,16 @@ func (s *AuthService) ParseToken(token string) (*authx.Actor, error) {
 	}
 	mc, _ := t.Claims.(jwt.MapClaims)
 	uid, _ := mc["uid"].(float64)
+	tid, _ := mc["tid"].(float64)
 	username, _ := mc["username"].(string)
 	name, _ := mc["name"].(string)
-	return &authx.Actor{UserID: uint(uid), Username: username, Name: name}, nil
+	var roles []string
+	if rs, ok := mc["roles"].([]any); ok {
+		for _, r := range rs {
+			if rc, ok := r.(string); ok {
+				roles = append(roles, rc)
+			}
+		}
+	}
+	return &authx.Actor{UserID: uint(uid), Username: username, Name: name, TenantID: uint(tid), Roles: roles}, nil
 }

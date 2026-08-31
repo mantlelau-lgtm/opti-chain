@@ -24,7 +24,7 @@ func NewSalesHandler(c *service.CustomerService, o *service.SalesOrderService) *
 // ---- Customer ----
 
 func (h *SalesHandler) CustomerList(c *gin.Context) {
-	list, total, err := h.Customers.List(parsePage(c))
+	list, total, err := h.Customers.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -32,7 +32,7 @@ func (h *SalesHandler) CustomerList(c *gin.Context) {
 }
 
 func (h *SalesHandler) CustomerGet(c *gin.Context) {
-	m, err := h.Customers.Get(idParam(c))
+	m, err := h.Customers.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -45,7 +45,7 @@ func (h *SalesHandler) CustomerCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Customers.Create(&m); mapErr(c, err) {
+	if err := h.Customers.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -57,14 +57,14 @@ func (h *SalesHandler) CustomerUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Customers.Update(idParam(c), &m); mapErr(c, err) {
+	if err := h.Customers.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *SalesHandler) CustomerDelete(c *gin.Context) {
-	if mapErr(c, h.Customers.Delete(idParam(c))) {
+	if mapErr(c, h.Customers.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -86,7 +86,7 @@ type soCreateRequest struct {
 }
 
 func (h *SalesHandler) List(c *gin.Context) {
-	list, total, err := h.Orders.List(parsePage(c))
+	list, total, err := h.Orders.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -94,7 +94,7 @@ func (h *SalesHandler) List(c *gin.Context) {
 }
 
 func (h *SalesHandler) Get(c *gin.Context) {
-	so, err := h.Orders.Get(idParam(c))
+	so, err := h.Orders.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -126,7 +126,7 @@ func (h *SalesHandler) Create(c *gin.Context) {
 			UnitPrice:  up,
 		})
 	}
-	so, err := h.Orders.Create(in)
+	so, err := h.Orders.Create(tenantOf(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -134,7 +134,7 @@ func (h *SalesHandler) Create(c *gin.Context) {
 }
 
 func (h *SalesHandler) Delete(c *gin.Context) {
-	if mapErr(c, h.Orders.Delete(idParam(c))) {
+	if mapErr(c, h.Orders.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -142,7 +142,7 @@ func (h *SalesHandler) Delete(c *gin.Context) {
 
 // Approve locks the available stock for every line and consumes credit.
 func (h *SalesHandler) Approve(c *gin.Context) {
-	so, err := h.Orders.Approve(idParam(c))
+	so, err := h.Orders.Approve(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -151,7 +151,7 @@ func (h *SalesHandler) Approve(c *gin.Context) {
 
 // Cancel releases locks + credit held by an approved order.
 func (h *SalesHandler) Cancel(c *gin.Context) {
-	so, err := h.Orders.Cancel(idParam(c))
+	so, err := h.Orders.Cancel(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}

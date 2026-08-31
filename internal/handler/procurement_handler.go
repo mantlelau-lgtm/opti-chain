@@ -33,7 +33,7 @@ type poCreateRequest struct {
 }
 
 func (h *PurchaseOrderHandler) List(c *gin.Context) {
-	list, total, err := h.svc.List(parsePage(c))
+	list, total, err := h.svc.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -41,7 +41,7 @@ func (h *PurchaseOrderHandler) List(c *gin.Context) {
 }
 
 func (h *PurchaseOrderHandler) Get(c *gin.Context) {
-	po, err := h.svc.Get(idParam(c))
+	po, err := h.svc.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -78,7 +78,7 @@ func (h *PurchaseOrderHandler) Create(c *gin.Context) {
 			LocationID: d.LocationID,
 		})
 	}
-	po, err := h.svc.Create(in)
+	po, err := h.svc.Create(tenantOf(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -106,7 +106,7 @@ func (h *PurchaseOrderHandler) Update(c *gin.Context) {
 		in.ExpectedDeliveryDate = &ed
 	}
 	if len(req.Details) == 0 {
-		po, err := h.svc.UpdateHeader(idParam(c), in)
+		po, err := h.svc.UpdateHeader(tenantOf(c), idParam(c), in)
 		if mapErr(c, err) {
 			return
 		}
@@ -123,7 +123,7 @@ func (h *PurchaseOrderHandler) Update(c *gin.Context) {
 			LocationID: d.LocationID,
 		})
 	}
-	po, err := h.svc.UpdateFull(idParam(c), in)
+	po, err := h.svc.UpdateFull(tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -139,14 +139,14 @@ func (h *PurchaseOrderHandler) SetStatus(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.svc.SetStatus(idParam(c), body.Status); mapErr(c, err) {
+	if err := h.svc.SetStatus(tenantOf(c), idParam(c), body.Status); mapErr(c, err) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c), "status": body.Status})
 }
 
 func (h *PurchaseOrderHandler) Delete(c *gin.Context) {
-	if mapErr(c, h.svc.Delete(idParam(c))) {
+	if mapErr(c, h.svc.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

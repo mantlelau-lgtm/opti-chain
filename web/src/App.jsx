@@ -10,6 +10,8 @@ import WarehousePage from './pages/WarehousePage.jsx'
 import LocationPage from './pages/LocationPage.jsx'
 import PurchaseOrderPage from './pages/PurchaseOrderPage.jsx'
 import SalesOrderPage from './pages/SalesOrderPage.jsx'
+import UsersPage from './pages/UsersPage.jsx'
+import TenantsPage from './pages/TenantsPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
 import PlanningPage from './pages/PlanningPage.jsx'
@@ -35,6 +37,8 @@ export default function App() {
            <Route path="locations" element={<LocationPage />} />
            <Route path="purchase-orders" element={<PurchaseOrderPage />} />
            <Route path="sales-orders" element={<SalesOrderPage />} />
+           <Route path="users" element={<UsersPage />} />
+           <Route path="tenants" element={<TenantsPage />} />
            <Route path="stock" element={<StockPage />} />
            <Route path="inventory" element={<InventoryPage />} />
            <Route path="planning" element={<PlanningPage />} />

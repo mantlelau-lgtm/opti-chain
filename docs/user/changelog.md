@@ -7,6 +7,18 @@
 - （规划）销售发货执行：出库推进 shipped_qty、释放锁定、自动完成
 - （规划）寻源链：采购申请 → 询报价比价 → 定标转 PO
 - （规划）独立质检单（inv_qc_order，含让步接收）、盘点单（inv_check）
+- （规划）套餐 gating（P4 运营骨架）
+
+## [0.2.0] - 2026-08-31
+
+### Added
+- 认证：JWT 登录（含租户码）、Auth 中间件、种子 admin/admin123
+- RBAC：六固定角色（表存储）+ 32 个权限点 + 模块目录（sys_module/sys_permission/sys_role/sys_role_permission），RequirePerm 按路由鉴权（403）
+- 多租户：sys_tenant + 租户管理（平台）/ 用户管理（租户内，平台可跨租户引导）；14 张业务表 tenant_id 行级隔离 + 复合唯一索引迁移
+- 前端：租户登录页、菜单按权限渲染、用户管理页、租户管理页（启用/停用）、/auth/me
+
+### Changed
+- 登录需租户码；旧数据自动收养到 demo 租户
 
 ## [0.1.0] - 2026-08-30
 

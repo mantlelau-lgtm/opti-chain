@@ -5,46 +5,44 @@ import (
 	"scm/internal/repository"
 )
 
+// Every method takes the tenant id first (threaded from the authenticated
+// Actor by the handler layer) so data never crosses tenant boundaries.
+
 // ---- Material ----
 
-// MaterialService wraps MaterialRepo with validation.
 type MaterialService struct{ repo *repository.MaterialRepo }
 
 func NewMaterialService(repo *repository.MaterialRepo) *MaterialService {
 	return &MaterialService{repo: repo}
 }
 
-// Create validates and persists a material.
-func (s *MaterialService) Create(m *model.Material) error {
-	if m.SKUCode == "" || m.Name == "" || m.Category == "" || m.Unit == "" {
-		return errorsBadRequest("sku_code/name/category/unit are required")
+func (s *MaterialService) Create(t uint, m *model.Material) error {
+	if m.SKUCode == "" || m.Name == "" || m.Unit == "" {
+		return errorsBadRequest("sku_code/name/unit are required")
 	}
-	return s.repo.Create(m)
+	return s.repo.Create(t, m)
 }
 
-// Update replaces an existing material.
-func (s *MaterialService) Update(id uint, m *model.Material) error {
+func (s *MaterialService) Update(t, id uint, m *model.Material) error {
 	m.ID = id
-	return s.repo.Update(m)
+	return s.repo.Update(t, m)
 }
 
-// Get loads a material by id.
-func (s *MaterialService) Get(id uint) (*model.Material, error) {
-	return s.repo.Get(id)
+func (s *MaterialService) Get(t, id uint) (*model.Material, error) {
+	return s.repo.Get(t, id)
 }
 
-// Delete removes a material.
-func (s *MaterialService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *MaterialService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-// List returns a paginated material list.
-func (s *MaterialService) List(in PageInput) ([]model.Material, int64, error) {
+func (s *MaterialService) List(t uint, in PageInput) ([]model.Material, int64, error) {
 	var (
 		out   []model.Material
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -52,39 +50,39 @@ func (s *MaterialService) List(in PageInput) ([]model.Material, int64, error) {
 
 // ---- Supplier ----
 
-// SupplierService wraps SupplierRepo.
 type SupplierService struct{ repo *repository.SupplierRepo }
 
 func NewSupplierService(repo *repository.SupplierRepo) *SupplierService {
 	return &SupplierService{repo: repo}
 }
 
-func (s *SupplierService) Create(m *model.Supplier) error {
+func (s *SupplierService) Create(t uint, m *model.Supplier) error {
 	if m.SupplierCode == "" || m.Name == "" {
 		return errorsBadRequest("supplier_code/name are required")
 	}
-	return s.repo.Create(m)
+	return s.repo.Create(t, m)
 }
 
-func (s *SupplierService) Update(id uint, m *model.Supplier) error {
+func (s *SupplierService) Update(t, id uint, m *model.Supplier) error {
 	m.ID = id
-	return s.repo.Update(m)
+	return s.repo.Update(t, m)
 }
 
-func (s *SupplierService) Get(id uint) (*model.Supplier, error) {
-	return s.repo.Get(id)
+func (s *SupplierService) Get(t, id uint) (*model.Supplier, error) {
+	return s.repo.Get(t, id)
 }
 
-func (s *SupplierService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *SupplierService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-func (s *SupplierService) List(in PageInput) ([]model.Supplier, int64, error) {
+func (s *SupplierService) List(t uint, in PageInput) ([]model.Supplier, int64, error) {
 	var (
 		out   []model.Supplier
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -92,11 +90,11 @@ func (s *SupplierService) List(in PageInput) ([]model.Supplier, int64, error) {
 
 // SetAuditStatus transitions a supplier's qualification state (RACI 准入).
 // Only APPROVED suppliers may be used on purchase orders.
-func (s *SupplierService) SetAuditStatus(id uint, status string) (*model.Supplier, error) {
+func (s *SupplierService) SetAuditStatus(t, id uint, status string) (*model.Supplier, error) {
 	if status != model.AuditPending && status != model.AuditApproved && status != model.AuditRejected {
 		return nil, errorsBadRequest("audit_status must be PENDING, APPROVED or REJECTED")
 	}
-	m, err := s.repo.Get(id)
+	m, err := s.repo.Get(t, id)
 	if m == nil {
 		return nil, errNotFound(id)
 	}
@@ -104,7 +102,7 @@ func (s *SupplierService) SetAuditStatus(id uint, status string) (*model.Supplie
 		return nil, err
 	}
 	m.AuditStatus = status
-	if err := s.repo.Update(m); err != nil {
+	if err := s.repo.Update(t, m); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -112,39 +110,39 @@ func (s *SupplierService) SetAuditStatus(id uint, status string) (*model.Supplie
 
 // ---- Warehouse ----
 
-// WarehouseService wraps WarehouseRepo.
 type WarehouseService struct{ repo *repository.WarehouseRepo }
 
 func NewWarehouseService(repo *repository.WarehouseRepo) *WarehouseService {
 	return &WarehouseService{repo: repo}
 }
 
-func (s *WarehouseService) Create(m *model.Warehouse) error {
+func (s *WarehouseService) Create(t uint, m *model.Warehouse) error {
 	if m.WarehouseCode == "" || m.Name == "" {
 		return errorsBadRequest("warehouse_code/name are required")
 	}
-	return s.repo.Create(m)
+	return s.repo.Create(t, m)
 }
 
-func (s *WarehouseService) Update(id uint, m *model.Warehouse) error {
+func (s *WarehouseService) Update(t, id uint, m *model.Warehouse) error {
 	m.ID = id
-	return s.repo.Update(m)
+	return s.repo.Update(t, m)
 }
 
-func (s *WarehouseService) Get(id uint) (*model.Warehouse, error) {
-	return s.repo.Get(id)
+func (s *WarehouseService) Get(t, id uint) (*model.Warehouse, error) {
+	return s.repo.Get(t, id)
 }
 
-func (s *WarehouseService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *WarehouseService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-func (s *WarehouseService) List(in PageInput) ([]model.Warehouse, int64, error) {
+func (s *WarehouseService) List(t uint, in PageInput) ([]model.Warehouse, int64, error) {
 	var (
 		out   []model.Warehouse
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -152,39 +150,39 @@ func (s *WarehouseService) List(in PageInput) ([]model.Warehouse, int64, error) 
 
 // ---- Location ----
 
-// LocationService wraps LocationRepo.
 type LocationService struct{ repo *repository.LocationRepo }
 
 func NewLocationService(repo *repository.LocationRepo) *LocationService {
 	return &LocationService{repo: repo}
 }
 
-func (s *LocationService) Create(m *model.Location) error {
-	if m.WarehouseID == 0 || m.LocationCode == "" {
-		return errorsBadRequest("warehouse_id/location_code are required")
+func (s *LocationService) Create(t uint, m *model.Location) error {
+	if m.LocationCode == "" || m.Name == "" {
+		return errorsBadRequest("location_code/name are required")
 	}
-	return s.repo.Create(m)
+	return s.repo.Create(t, m)
 }
 
-func (s *LocationService) Update(id uint, m *model.Location) error {
+func (s *LocationService) Update(t, id uint, m *model.Location) error {
 	m.ID = id
-	return s.repo.Update(m)
+	return s.repo.Update(t, m)
 }
 
-func (s *LocationService) Get(id uint) (*model.Location, error) {
-	return s.repo.Get(id)
+func (s *LocationService) Get(t, id uint) (*model.Location, error) {
+	return s.repo.Get(t, id)
 }
 
-func (s *LocationService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *LocationService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-func (s *LocationService) List(in PageInput) ([]model.Location, int64, error) {
+func (s *LocationService) List(t uint, in PageInput) ([]model.Location, int64, error) {
 	var (
 		out   []model.Location
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil

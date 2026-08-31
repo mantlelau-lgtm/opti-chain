@@ -19,32 +19,33 @@ func NewCustomerService(repo *repository.CustomerRepo) *CustomerService {
 	return &CustomerService{repo: repo}
 }
 
-func (s *CustomerService) Create(m *model.Customer) error {
+func (s *CustomerService) Create(t uint, m *model.Customer) error {
 	if m.CustomerCode == "" || m.Name == "" {
 		return errorsBadRequest("customer_code/name are required")
 	}
-	return s.repo.Create(m)
+	return s.repo.Create(t, m)
 }
 
-func (s *CustomerService) Update(id uint, m *model.Customer) error {
+func (s *CustomerService) Update(t, id uint, m *model.Customer) error {
 	m.ID = id
-	return s.repo.Update(m)
+	return s.repo.Update(t, m)
 }
 
-func (s *CustomerService) Get(id uint) (*model.Customer, error) {
-	return s.repo.Get(id)
+func (s *CustomerService) Get(t, id uint) (*model.Customer, error) {
+	return s.repo.Get(t, id)
 }
 
-func (s *CustomerService) Delete(id uint) error {
-	return s.repo.Delete(id)
+func (s *CustomerService) Delete(t, id uint) error {
+	return s.repo.Delete(t, id)
 }
 
-func (s *CustomerService) List(in PageInput) ([]model.Customer, int64, error) {
+func (s *CustomerService) List(t uint, in PageInput) ([]model.Customer, int64, error) {
 	var (
 		out   []model.Customer
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -96,11 +97,11 @@ type SODetailInput struct {
 
 // Create validates an SO, computes totals and persists it as DRAFT. The
 // customer must exist and be approved (SOP 准入管控).
-func (s *SalesOrderService) Create(in CreateSOInput) (*model.SaleOrder, error) {
+func (s *SalesOrderService) Create(t uint, in CreateSOInput) (*model.SaleOrder, error) {
 	if in.CustomerID == 0 || len(in.Details) == 0 {
 		return nil, errorsBadRequest("customer_id and at least one detail are required")
 	}
-	cust, err := s.customers.Get(in.CustomerID)
+	cust, err := s.customers.Get(t, in.CustomerID)
 	if cust == nil {
 		return nil, errNotFound(in.CustomerID)
 	}
@@ -132,22 +133,23 @@ func (s *SalesOrderService) Create(in CreateSOInput) (*model.SaleOrder, error) {
 		})
 		so.TotalAmount = so.TotalAmount.Add(lineTotal)
 	}
-	if err := s.repo.CreateWithDetails(so); err != nil {
+	if err := s.repo.CreateWithDetails(t, so); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(so.ID)
+	return s.repo.GetWithDetails(t, so.ID)
 }
 
-func (s *SalesOrderService) Get(id uint) (*model.SaleOrder, error) {
-	return s.repo.GetWithDetails(id)
+func (s *SalesOrderService) Get(t, id uint) (*model.SaleOrder, error) {
+	return s.repo.GetWithDetails(t, id)
 }
 
-func (s *SalesOrderService) List(in PageInput) ([]model.SaleOrder, int64, error) {
+func (s *SalesOrderService) List(t uint, in PageInput) ([]model.SaleOrder, int64, error) {
 	var (
 		out   []model.SaleOrder
 		total int64
 	)
-	if err := s.repo.List(repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
+	if err := s.repo.List(f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -155,8 +157,8 @@ func (s *SalesOrderService) List(in PageInput) ([]model.SaleOrder, int64, error)
 
 // Delete removes an SO. Only DRAFT orders may be deleted — approved orders
 // hold stock reservations and credit, so they must be cancelled instead.
-func (s *SalesOrderService) Delete(id uint) error {
-	so, err := s.repo.Get(id)
+func (s *SalesOrderService) Delete(t, id uint) error {
+	so, err := s.repo.Get(t, id)
 	if so == nil {
 		return errNotFound(id)
 	}
@@ -166,14 +168,14 @@ func (s *SalesOrderService) Delete(id uint) error {
 	if so.Status != model.SOStatusDraft {
 		return errorsBadRequest("only DRAFT sales orders can be deleted; cancel it instead")
 	}
-	return s.repo.Delete(id)
+	return s.repo.Delete(t, id)
 }
 
 // Approve transitions DRAFT -> APPROVED: every line reserves available stock
 // (available = quantity - locked_quantity) and the order amount is charged to
 // the customer's credit line. Both happen in one transaction.
-func (s *SalesOrderService) Approve(id uint) (*model.SaleOrder, error) {
-	so, err := s.repo.GetWithDetails(id)
+func (s *SalesOrderService) Approve(t, id uint) (*model.SaleOrder, error) {
+	so, err := s.repo.GetWithDetails(t, id)
 	if so == nil {
 		return nil, errNotFound(id)
 	}
@@ -183,7 +185,7 @@ func (s *SalesOrderService) Approve(id uint) (*model.SaleOrder, error) {
 	if so.Status != model.SOStatusDraft {
 		return nil, errorsBadRequest("only DRAFT sales orders can be approved")
 	}
-	cust, err := s.customers.Get(so.CustomerID)
+	cust, err := s.customers.Get(t, so.CustomerID)
 	if cust == nil || err != nil {
 		return nil, errNotFound(so.CustomerID)
 	}
@@ -197,17 +199,17 @@ func (s *SalesOrderService) Approve(id uint) (*model.SaleOrder, error) {
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		for _, d := range so.Details {
-			if err := s.lockStockTx(tx, d.MaterialID, d.Qty); err != nil {
+			if err := s.lockStockTx(tx, t, d.MaterialID, d.Qty); err != nil {
 				return err
 			}
 		}
 		if err := tx.Model(&model.Customer{}).
-			Where("id = ?", cust.ID).
+			Where("id = ? AND tenant_id = ?", cust.ID, t).
 			Update("used_credit", gorm.Expr("used_credit + ?", so.TotalAmount)).Error; err != nil {
 			return err
 		}
 		res := tx.Model(&model.SaleOrder{}).
-			Where("id = ? AND status = ?", id, model.SOStatusDraft).
+			Where("id = ? AND tenant_id = ? AND status = ?", id, t, model.SOStatusDraft).
 			Update("status", model.SOStatusApproved)
 		if res.Error != nil {
 			return res.Error
@@ -220,13 +222,13 @@ func (s *SalesOrderService) Approve(id uint) (*model.SaleOrder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(id)
+	return s.repo.GetWithDetails(t, id)
 }
 
 // Cancel transitions DRAFT/APPROVED -> CANCELLED. Approved orders release
 // their stock reservations and credit.
-func (s *SalesOrderService) Cancel(id uint) (*model.SaleOrder, error) {
-	so, err := s.repo.GetWithDetails(id)
+func (s *SalesOrderService) Cancel(t, id uint) (*model.SaleOrder, error) {
+	so, err := s.repo.GetWithDetails(t, id)
 	if so == nil {
 		return nil, errNotFound(id)
 	}
@@ -241,31 +243,31 @@ func (s *SalesOrderService) Cancel(id uint) (*model.SaleOrder, error) {
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		if wasApproved {
 			for _, d := range so.Details {
-				if err := s.unlockStockTx(tx, d.MaterialID, d.Qty); err != nil {
+				if err := s.unlockStockTx(tx, t, d.MaterialID, d.Qty); err != nil {
 					return err
 				}
 			}
 			if err := tx.Model(&model.Customer{}).
-				Where("id = ? AND used_credit >= ?", so.CustomerID, so.TotalAmount).
+				Where("id = ? AND tenant_id = ? AND used_credit >= ?", so.CustomerID, t, so.TotalAmount).
 				Update("used_credit", gorm.Expr("used_credit - ?", so.TotalAmount)).Error; err != nil {
 				return err
 			}
 		}
 		return tx.Model(&model.SaleOrder{}).
-			Where("id = ?", id).
+			Where("id = ? AND tenant_id = ?", id, t).
 			Update("status", model.SOStatusCancelled).Error
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(id)
+	return s.repo.GetWithDetails(t, id)
 }
 
 // lockStockTx reserves qty for a material across stock rows inside tx.
 // Allocation is largest-first; every UPDATE is guarded so a concurrent
 // reservation can never over-lock (0 rows -> rollback).
-func (s *SalesOrderService) lockStockTx(tx *gorm.DB, matID uint, qty decimal.Decimal) error {
-	rows, err := s.stock.AvailableRowsInTx(tx, matID)
+func (s *SalesOrderService) lockStockTx(tx *gorm.DB, t, matID uint, qty decimal.Decimal) error {
+	rows, err := s.stock.AvailableRowsInTx(tx, t, matID)
 	if err != nil {
 		return err
 	}
@@ -295,8 +297,8 @@ func (s *SalesOrderService) lockStockTx(tx *gorm.DB, matID uint, qty decimal.Dec
 
 // unlockStockTx releases a reservation. Locked units are fungible, so the
 // release is taken from any rows of the material carrying reservations.
-func (s *SalesOrderService) unlockStockTx(tx *gorm.DB, matID uint, qty decimal.Decimal) error {
-	rows, err := s.stock.LockedRowsInTx(tx, matID)
+func (s *SalesOrderService) unlockStockTx(tx *gorm.DB, t, matID uint, qty decimal.Decimal) error {
+	rows, err := s.stock.LockedRowsInTx(tx, t, matID)
 	if err != nil {
 		return err
 	}

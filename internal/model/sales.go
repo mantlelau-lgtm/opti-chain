@@ -16,8 +16,8 @@ const (
 // Customer corresponds to base_customer. credit_limit <= 0 means credit
 // control is disabled for the customer.
 type Customer struct {
-	BaseModel
-	CustomerCode  string          `gorm:"column:customer_code;size:64;uniqueIndex;not null" json:"customer_code"`
+	TenantBaseModel
+	CustomerCode  string          `gorm:"column:customer_code;size:64;index;not null" json:"customer_code"`
 	Name          string          `gorm:"column:name;size:128;not null" json:"name"`
 	ContactPerson string          `gorm:"column:contact_person;size:64" json:"contact_person"`
 	Phone         string          `gorm:"column:phone;size:32" json:"phone"`
@@ -41,8 +41,8 @@ const (
 // SaleOrder corresponds to sale_order. Approval locks stock (anti-oversell)
 // and consumes customer credit; cancellation reverses both.
 type SaleOrder struct {
-	BaseModel
-	SONumber    string          `gorm:"column:so_number;size:64;uniqueIndex;not null" json:"so_number"`
+	TenantBaseModel
+	SONumber    string          `gorm:"column:so_number;size:64;index;not null" json:"so_number"`
 	CustomerID  uint            `gorm:"column:customer_id;not null;index" json:"customer_id"`
 	OrderDate   time.Time       `gorm:"column:order_date;not null" json:"order_date"`
 	TotalAmount decimal.Decimal `gorm:"column:total_amount;type:decimal(14,2);default:0" json:"total_amount"`

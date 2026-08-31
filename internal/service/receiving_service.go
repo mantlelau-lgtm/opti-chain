@@ -68,8 +68,8 @@ type ReceiveDetailInput struct {
 }
 
 // Receive executes one receiving round and returns the persisted receipt.
-func (s *ReceivingService) Receive(poID uint, in ReceiveInput) (*model.PurchaseReceipt, error) {
-	po, err := s.pos.GetWithDetails(poID)
+func (s *ReceivingService) Receive(t, poID uint, in ReceiveInput) (*model.PurchaseReceipt, error) {
+	po, err := s.pos.GetWithDetails(t, poID)
 	if po == nil {
 		return nil, errNotFound(poID)
 	}
@@ -143,12 +143,12 @@ func (s *ReceivingService) Receive(poID uint, in ReceiveInput) (*model.PurchaseR
 		if rc.ReceiptNumber == "" {
 			var count int64
 			if err := tx.Model(&model.PurchaseReceipt{}).
-				Where("po_id = ?", poID).Count(&count).Error; err != nil {
+				Where("tenant_id = ? AND po_id = ?", t, poID).Count(&count).Error; err != nil {
 				return err
 			}
 			rc.ReceiptNumber = fmt.Sprintf("RCV-%s-%02d", po.PONumber, count+1)
 		}
-		if err := s.receipts.CreateWithDetailsInTx(tx, rc); err != nil {
+		if err := s.receipts.CreateWithDetailsInTx(tx, t, rc); err != nil {
 			return err
 		}
 
@@ -171,7 +171,7 @@ func (s *ReceivingService) Receive(poID uint, in ReceiveInput) (*model.PurchaseR
 		// Book the accepted quantities into stock (rejected ones never touch
 		// inv_stock / the audit log).
 		if len(moveDetails) > 0 {
-			if _, err := s.inv.applyMovementInTx(tx, MoveInput{
+			if _, err := s.inv.applyMovementInTx(tx, t, MoveInput{
 				OrderNumber:    "INV-" + rc.ReceiptNumber,
 				OrderType:      model.OrderTypePurchaseIn,
 				RefOrderNumber: rc.ReceiptNumber,
@@ -199,7 +199,7 @@ func (s *ReceivingService) Receive(poID uint, in ReceiveInput) (*model.PurchaseR
 			next = model.POStatusCompleted
 		}
 		return tx.Model(&model.PurchaseOrder{}).
-			Where("id = ?", poID).
+			Where("id = ? AND tenant_id = ?", poID, t).
 			Update("status", next).Error
 	})
 	if err != nil {
@@ -209,9 +209,9 @@ func (s *ReceivingService) Receive(poID uint, in ReceiveInput) (*model.PurchaseR
 }
 
 // ListReceipts returns all receiving rounds of a PO, newest first.
-func (s *ReceivingService) ListReceipts(poID uint) ([]model.PurchaseReceipt, error) {
+func (s *ReceivingService) ListReceipts(t, poID uint) ([]model.PurchaseReceipt, error) {
 	var out []model.PurchaseReceipt
-	if err := s.receipts.ListByPO(poID, &out); err != nil {
+	if err := s.receipts.ListByPO(t, poID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

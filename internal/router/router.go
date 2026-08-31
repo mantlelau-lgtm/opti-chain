@@ -11,7 +11,7 @@ import (
 
 // Handlers groups every handler the router needs.
 type Handlers struct {
-	Auth      *handler.AuthHandler
+	RBAC      *handler.RBACHandler
 	Base      *handler.BaseDataHandler
 	PO        *handler.PurchaseOrderHandler
 	Receiving *handler.ReceivingHandler
@@ -22,8 +22,9 @@ type Handlers struct {
 }
 
 // New builds a configured gin engine with all routes registered. authMW
-// protects every /api/v1 route except the public login endpoint.
-func New(corsOrigin string, h *Handlers, authMW gin.HandlerFunc) *gin.Engine {
+// verifies the bearer token and permMW enforces the DB-catalogued permission;
+// both protect every /api/v1 route except the public login endpoint.
+func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.Engine {
 	g := gin.New()
 	g.Use(middleware.Recovery())
 	g.Use(gin.Logger())
@@ -31,18 +32,38 @@ func New(corsOrigin string, h *Handlers, authMW gin.HandlerFunc) *gin.Engine {
 
 	api := g.Group("/api/v1")
 	{
-		api.POST("/auth/login", h.Auth.Login)
+		api.POST("/auth/login", h.RBAC.Login)
 	}
 	protected := g.Group("/api/v1")
-	protected.Use(authMW)
+	protected.Use(authMW, permMW)
 	{
+		protected.GET("/auth/me", h.RBAC.Me)
+		protected.GET("/rbac/catalog", h.RBAC.Catalog)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)
 		registerInventory(protected, h.Inventory, h.Stock)
 		registerPlanning(protected, h.Planning)
+		registerRBAC(protected, h.RBAC)
 	}
 	return g
+}
+
+func registerRBAC(g *gin.RouterGroup, h *handler.RBACHandler) {
+	t := g.Group("/tenants")
+	{
+		t.GET("", h.TenantList)
+		t.POST("", h.TenantCreate)
+		t.PUT("/:id", h.TenantUpdate)
+	}
+	u := g.Group("/users")
+	{
+		u.GET("", h.UserList)
+		u.POST("", h.UserCreate)
+		u.PUT("/:id", h.UserUpdate)
+		u.DELETE("/:id", h.UserDelete)
+		u.GET("/:id/roles", h.UserRoles)
+	}
 }
 
 func registerBase(g *gin.RouterGroup, h *handler.BaseDataHandler) {

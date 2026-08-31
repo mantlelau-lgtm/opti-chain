@@ -21,7 +21,7 @@ func NewPlanningHandler(svc *service.PlanningService) *PlanningHandler {
 // ---- Demand ----
 
 func (h *PlanningHandler) DemandList(c *gin.Context) {
-	list, total, err := h.svc.ListDemands(parsePage(c))
+	list, total, err := h.svc.ListDemands(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -29,7 +29,7 @@ func (h *PlanningHandler) DemandList(c *gin.Context) {
 }
 
 func (h *PlanningHandler) DemandGet(c *gin.Context) {
-	m, err := h.svc.GetDemand(idParam(c))
+	m, err := h.svc.GetDemand(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -60,7 +60,7 @@ func (h *PlanningHandler) DemandCreate(c *gin.Context) {
 		DemandDate:   parseTime(req.DemandDate),
 		SourceType:   req.SourceType,
 	}
-	if err := h.svc.CreateDemand(d); mapErr(c, err) {
+	if err := h.svc.CreateDemand(tenantOf(c), d); mapErr(c, err) {
 		return
 	}
 	response.OK(c, d)
@@ -79,14 +79,14 @@ func (h *PlanningHandler) DemandUpdate(c *gin.Context) {
 		DemandDate:   parseTime(req.DemandDate),
 		SourceType:   req.SourceType,
 	}
-	if err := h.svc.UpdateDemand(idParam(c), d); mapErr(c, err) {
+	if err := h.svc.UpdateDemand(tenantOf(c), idParam(c), d); mapErr(c, err) {
 		return
 	}
 	response.OK(c, d)
 }
 
 func (h *PlanningHandler) DemandDelete(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteDemand(idParam(c))) {
+	if mapErr(c, h.svc.DeleteDemand(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -95,7 +95,7 @@ func (h *PlanningHandler) DemandDelete(c *gin.Context) {
 // ---- MRP ----
 
 func (h *PlanningHandler) MrpList(c *gin.Context) {
-	list, total, err := h.svc.ListMrp(parsePage(c))
+	list, total, err := h.svc.ListMrp(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -103,7 +103,7 @@ func (h *PlanningHandler) MrpList(c *gin.Context) {
 }
 
 func (h *PlanningHandler) MrpGet(c *gin.Context) {
-	m, err := h.svc.GetMrp(idParam(c))
+	m, err := h.svc.GetMrp(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -111,7 +111,7 @@ func (h *PlanningHandler) MrpGet(c *gin.Context) {
 }
 
 func (h *PlanningHandler) MrpDelete(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteMrp(idParam(c))) {
+	if mapErr(c, h.svc.DeleteMrp(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -120,7 +120,7 @@ func (h *PlanningHandler) MrpDelete(c *gin.Context) {
 // ComputeMRP triggers a material-requirements calculation batch.
 func (h *PlanningHandler) ComputeMRP(c *gin.Context) {
 	batch := "MRP" + time.Now().Format("20060102150405")
-	results, err := h.svc.ComputeMRP(batch)
+	results, err := h.svc.ComputeMRP(tenantOf(c), batch)
 	if mapErr(c, err) {
 		return
 	}
@@ -134,7 +134,7 @@ func (h *PlanningHandler) MrpConvert(c *gin.Context) {
 	}
 	// Body is optional; bind tolerates an empty payload.
 	_ = c.ShouldBindJSON(&body)
-	po, err := h.svc.ConvertMRP(idParam(c), body.PONumber)
+	po, err := h.svc.ConvertMRP(tenantOf(c), idParam(c), body.PONumber)
 	if mapErr(c, err) {
 		return
 	}

@@ -24,7 +24,7 @@ func NewBaseDataHandler(m *service.MaterialService, su *service.SupplierService,
 // ---- Material ----
 
 func (h *BaseDataHandler) MaterialList(c *gin.Context) {
-	list, total, err := h.Material.List(parsePage(c))
+	list, total, err := h.Material.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -32,7 +32,7 @@ func (h *BaseDataHandler) MaterialList(c *gin.Context) {
 }
 
 func (h *BaseDataHandler) MaterialGet(c *gin.Context) {
-	m, err := h.Material.Get(idParam(c))
+	m, err := h.Material.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -45,7 +45,7 @@ func (h *BaseDataHandler) MaterialCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Material.Create(&m); mapErr(c, err) {
+	if err := h.Material.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -57,14 +57,14 @@ func (h *BaseDataHandler) MaterialUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Material.Update(idParam(c), &m); mapErr(c, err) {
+	if err := h.Material.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *BaseDataHandler) MaterialDelete(c *gin.Context) {
-	if mapErr(c, h.Material.Delete(idParam(c))) {
+	if mapErr(c, h.Material.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -73,7 +73,7 @@ func (h *BaseDataHandler) MaterialDelete(c *gin.Context) {
 // ---- Supplier ----
 
 func (h *BaseDataHandler) SupplierList(c *gin.Context) {
-	list, total, err := h.Supplier.List(parsePage(c))
+	list, total, err := h.Supplier.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -81,7 +81,7 @@ func (h *BaseDataHandler) SupplierList(c *gin.Context) {
 }
 
 func (h *BaseDataHandler) SupplierGet(c *gin.Context) {
-	m, err := h.Supplier.Get(idParam(c))
+	m, err := h.Supplier.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -94,7 +94,7 @@ func (h *BaseDataHandler) SupplierCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Supplier.Create(&m); mapErr(c, err) {
+	if err := h.Supplier.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -106,14 +106,14 @@ func (h *BaseDataHandler) SupplierUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Supplier.Update(idParam(c), &m); mapErr(c, err) {
+	if err := h.Supplier.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *BaseDataHandler) SupplierDelete(c *gin.Context) {
-	if mapErr(c, h.Supplier.Delete(idParam(c))) {
+	if mapErr(c, h.Supplier.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -128,7 +128,7 @@ func (h *BaseDataHandler) SupplierSetAudit(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	m, err := h.Supplier.SetAuditStatus(idParam(c), body.AuditStatus)
+	m, err := h.Supplier.SetAuditStatus(tenantOf(c), idParam(c), body.AuditStatus)
 	if mapErr(c, err) {
 		return
 	}
@@ -138,7 +138,7 @@ func (h *BaseDataHandler) SupplierSetAudit(c *gin.Context) {
 // ---- Warehouse ----
 
 func (h *BaseDataHandler) WarehouseList(c *gin.Context) {
-	list, total, err := h.Warehouse.List(parsePage(c))
+	list, total, err := h.Warehouse.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -146,7 +146,7 @@ func (h *BaseDataHandler) WarehouseList(c *gin.Context) {
 }
 
 func (h *BaseDataHandler) WarehouseGet(c *gin.Context) {
-	m, err := h.Warehouse.Get(idParam(c))
+	m, err := h.Warehouse.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -159,7 +159,7 @@ func (h *BaseDataHandler) WarehouseCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Warehouse.Create(&m); mapErr(c, err) {
+	if err := h.Warehouse.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -171,14 +171,14 @@ func (h *BaseDataHandler) WarehouseUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Warehouse.Update(idParam(c), &m); mapErr(c, err) {
+	if err := h.Warehouse.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *BaseDataHandler) WarehouseDelete(c *gin.Context) {
-	if mapErr(c, h.Warehouse.Delete(idParam(c))) {
+	if mapErr(c, h.Warehouse.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -187,7 +187,7 @@ func (h *BaseDataHandler) WarehouseDelete(c *gin.Context) {
 // ---- Location ----
 
 func (h *BaseDataHandler) LocationList(c *gin.Context) {
-	list, total, err := h.Location.List(parsePage(c))
+	list, total, err := h.Location.List(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -195,7 +195,7 @@ func (h *BaseDataHandler) LocationList(c *gin.Context) {
 }
 
 func (h *BaseDataHandler) LocationGet(c *gin.Context) {
-	m, err := h.Location.Get(idParam(c))
+	m, err := h.Location.Get(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -208,7 +208,7 @@ func (h *BaseDataHandler) LocationCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Location.Create(&m); mapErr(c, err) {
+	if err := h.Location.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -220,14 +220,14 @@ func (h *BaseDataHandler) LocationUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Location.Update(idParam(c), &m); mapErr(c, err) {
+	if err := h.Location.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *BaseDataHandler) LocationDelete(c *gin.Context) {
-	if mapErr(c, h.Location.Delete(idParam(c))) {
+	if mapErr(c, h.Location.Delete(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

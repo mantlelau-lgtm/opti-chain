@@ -1,5 +1,23 @@
 import client, { pageRes } from './client'
 
+// ---- Auth / RBAC / Tenants ----
+export const authApi = {
+  login: (d) => client.post('/auth/login', d),
+  me: () => client.get('/auth/me'),
+  catalog: () => client.get('/rbac/catalog'),
+}
+export const tenantApi = {
+  list: (p) => api.list('/tenants', p),
+  create: (d) => api.create('/tenants', d),
+  update: (id, d) => api.update(`/tenants/${id}`, d),
+}
+export const userApi = {
+  list: (p) => api.list('/users', p),
+  create: (d) => api.create('/users', d),
+  update: (id, d) => api.update(`/users/${id}`, d),
+  remove: (id) => api.remove(`/users/${id}`),
+}
+
 // Generic REST helpers used by every resource module. Each returns the
 // unwrapped payload, so pages never touch axios or the envelope directly.
 const api = {

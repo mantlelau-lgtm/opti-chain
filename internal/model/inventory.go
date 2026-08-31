@@ -23,7 +23,7 @@ const (
 
 // Stock corresponds to inv_stock (real-time on-hand inventory).
 type Stock struct {
-	BaseModel
+	TenantBaseModel
 	WarehouseID    uint            `gorm:"column:warehouse_id;not null;index" json:"warehouse_id"`
 	LocationID     uint            `gorm:"column:location_id;default:0" json:"location_id"`
 	MaterialID     uint            `gorm:"column:material_id;not null;index" json:"material_id"`
@@ -35,8 +35,8 @@ func (Stock) TableName() string { return "inv_stock" }
 
 // InventoryOrder corresponds to inv_order.
 type InventoryOrder struct {
-	BaseModel
-	OrderNumber    string `gorm:"column:order_number;size:64;uniqueIndex;not null" json:"order_number"`
+	TenantBaseModel
+	OrderNumber    string `gorm:"column:order_number;size:64;index;not null" json:"order_number"`
 	OrderType      string `gorm:"column:order_type;size:32;not null" json:"order_type"`
 	RefOrderNumber string `gorm:"column:ref_order_number;size:64" json:"ref_order_number"`
 	WarehouseID    uint   `gorm:"column:warehouse_id;not null;index" json:"warehouse_id"`
@@ -60,7 +60,7 @@ func (InventoryOrderDetail) TableName() string { return "inv_order_detail" }
 
 // TransactionLog corresponds to inv_transaction_log (audit trail).
 type TransactionLog struct {
-	BaseModel
+	TenantBaseModel
 	MaterialID     uint            `gorm:"column:material_id;not null;index" json:"material_id"`
 	WarehouseID    uint            `gorm:"column:warehouse_id;not null;index" json:"warehouse_id"`
 	LocationID     uint            `gorm:"column:location_id;default:0" json:"location_id"`

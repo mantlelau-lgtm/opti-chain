@@ -41,12 +41,24 @@ func main() {
 	customerRepo := repository.NewCustomerRepo(gdb)
 	soRepo := repository.NewSaleOrderRepo(gdb)
 	userRepo := repository.NewUserRepo(gdb)
+	tenantRepo := repository.NewTenantRepo(gdb)
+	roleRepo := repository.NewRoleRepo(gdb)
+	moduleRepo := repository.NewModuleRepo(gdb)
+	permRepo := repository.NewPermissionRepo(gdb)
+	userRoleRepo := repository.NewUserRoleRepo(gdb)
 
 	// 3) Services (business logic).
-	authSvc := service.NewAuthService(userRepo, cfg.Auth.JWTSecret, cfg.Auth.TokenTTL, db.DB)
-	if err := authSvc.SeedAdmin(); err != nil {
-		log.Fatalf("seed admin: %v", err)
+	if err := service.SeedRBAC(db.DB); err != nil {
+		log.Fatalf("seed rbac: %v", err)
 	}
+	rbacSvc := service.NewRBACService(service.RBACDeps{
+		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
+		Modules: moduleRepo, Perms: permRepo, UserRoles: userRoleRepo, DB: db.DB,
+	})
+	if err := rbacSvc.RefreshCache(); err != nil {
+		log.Fatalf("refresh permission cache: %v", err)
+	}
+	authSvc := service.NewAuthService(userRepo, tenantRepo, userRoleRepo, cfg.Auth.JWTSecret, cfg.Auth.TokenTTL)
 	materialSvc := service.NewMaterialService(materialRepo)
 	supplierSvc := service.NewSupplierService(supplierRepo)
 	warehouseSvc := service.NewWarehouseService(warehouseRepo)
@@ -83,7 +95,7 @@ func main() {
 
 	// 4) Handlers (HTTP translation).
 	h := &router.Handlers{
-		Auth:      handler.NewAuthHandler(authSvc),
+		RBAC:      handler.NewRBACHandler(rbacSvc, authSvc),
 		Base:      handler.NewBaseDataHandler(materialSvc, supplierSvc, warehouseSvc, locationSvc),
 		PO:        handler.NewPurchaseOrderHandler(poSvc),
 		Receiving: handler.NewReceivingHandler(receivingSvc),
@@ -95,7 +107,8 @@ func main() {
 
 	// 5) Router + start.
 	authMW := middleware.Auth(cfg.Auth.Enabled, authSvc.ParseToken)
-	engine := router.New(cfg.Server.CORSOrigin, h, authMW)
+	permMW := middleware.RequirePerm(cfg.Auth.Enabled, rbacSvc.Check)
+	engine := router.New(cfg.Server.CORSOrigin, h, authMW, permMW)
 	if !cfg.Auth.Enabled {
 		log.Printf("WARNING: SCM_AUTH=off — authentication disabled (dev only)")
 	}

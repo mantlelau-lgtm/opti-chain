@@ -11,21 +11,21 @@ import (
 
 // PurchaseOrderRepo owns pur_order + pur_order_detail.
 type PurchaseOrderRepo struct {
-	*genericRepo[model.PurchaseOrder]
+	*tenantRepo[model.PurchaseOrder]
 	db *gormDB
 }
 
 func NewPurchaseOrderRepo(db *gormDB) *PurchaseOrderRepo {
 	return &PurchaseOrderRepo{
-		genericRepo: newGenericRepo[model.PurchaseOrder](db),
-		db:          db,
+		tenantRepo: newTenantRepo[model.PurchaseOrder](db),
+		db:         db,
 	}
 }
 
-// GetWithDetails loads a PO with its details preloaded.
-func (r *PurchaseOrderRepo) GetWithDetails(id uint) (*model.PurchaseOrder, error) {
+// GetWithDetails loads a PO with its details preloaded, scoped to a tenant.
+func (r *PurchaseOrderRepo) GetWithDetails(t, id uint) (*model.PurchaseOrder, error) {
 	var po model.PurchaseOrder
-	if err := r.db.DB.Preload("Details").First(&po, id).Error; err != nil {
+	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&po, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
@@ -38,7 +38,8 @@ func (r *PurchaseOrderRepo) GetWithDetails(id uint) (*model.PurchaseOrder, error
 // header is created with associations omitted so the explicit detail loop
 // below stays the single writer (GORM would otherwise cascade-insert the
 // Details slice and collide on primary keys).
-func (r *PurchaseOrderRepo) CreateWithDetails(po *model.PurchaseOrder) error {
+func (r *PurchaseOrderRepo) CreateWithDetails(t uint, po *model.PurchaseOrder) error {
+	po.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(po).Error; err != nil {
 			return err
@@ -54,8 +55,10 @@ func (r *PurchaseOrderRepo) CreateWithDetails(po *model.PurchaseOrder) error {
 }
 
 // UpdateWithDetails replaces a PO header and its detail lines in one
-// transaction. Existing lines are wiped first, so an edit is a full replace.
-func (r *PurchaseOrderRepo) UpdateWithDetails(po *model.PurchaseOrder) error {
+// transaction, scoped to the tenant. Existing lines are wiped first, so an
+// edit is a full replace.
+func (r *PurchaseOrderRepo) UpdateWithDetails(t uint, po *model.PurchaseOrder) error {
+	po.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		// 1) drop the old lines for this PO.
 		if err := tx.Where("po_id = ?", po.ID).Delete(&model.PurchaseOrderDetail{}).Error; err != nil {
@@ -73,7 +76,7 @@ func (r *PurchaseOrderRepo) UpdateWithDetails(po *model.PurchaseOrder) error {
 		//    just wrote explicitly), to avoid a second insert.
 		saved := po.Details
 		po.Details = nil
-		err := tx.Save(po).Error
+		err := tx.Where("tenant_id = ?", t).Save(po).Error
 		po.Details = saved
 		return err
 	})
@@ -81,13 +84,13 @@ func (r *PurchaseOrderRepo) UpdateWithDetails(po *model.PurchaseOrder) error {
 
 // UpdateColumns applies a selective column update to the PO header only —
 // details, totals, status and received progress stay untouched.
-func (r *PurchaseOrderRepo) UpdateColumns(id uint, cols map[string]any) error {
+func (r *PurchaseOrderRepo) UpdateColumns(t, id uint, cols map[string]any) error {
 	return r.db.DB.Model(&model.PurchaseOrder{}).
-		Where("id = ?", id).
+		Where("id = ? AND tenant_id = ?", id, t).
 		Updates(cols).Error
 }
 
-// List returns paginated POs ordered newest first.
+// List returns paginated POs ordered newest first within a tenant.
 func (r *PurchaseOrderRepo) List(f ListFilter, out *[]model.PurchaseOrder, total *int64) error {
 	apply := func(q *gorm.DB) *gorm.DB {
 		if f.Keyword != "" {
@@ -96,7 +99,7 @@ func (r *PurchaseOrderRepo) List(f ListFilter, out *[]model.PurchaseOrder, total
 		}
 		return q.Order("id DESC")
 	}
-	return r.list(f, apply, out, total)
+	return r.listT(f, apply, out, total)
 }
 
 // UpdateDetail persists a single detail line (e.g. received_qty updates).
@@ -124,19 +127,20 @@ func (r *PurchaseOrderRepo) ListDetailsInTx(tx *gorm.DB, poID uint) ([]model.Pur
 
 // PurchaseReceiptRepo owns pur_receipt + pur_receipt_detail.
 type PurchaseReceiptRepo struct {
-	*genericRepo[model.PurchaseReceipt]
+	*tenantRepo[model.PurchaseReceipt]
 	db *gormDB
 }
 
 func NewPurchaseReceiptRepo(db *gormDB) *PurchaseReceiptRepo {
 	return &PurchaseReceiptRepo{
-		genericRepo: newGenericRepo[model.PurchaseReceipt](db),
-		db:          db,
+		tenantRepo: newTenantRepo[model.PurchaseReceipt](db),
+		db:         db,
 	}
 }
 
 // CreateWithDetailsInTx persists a receipt and its lines inside an outer tx.
-func (r *PurchaseReceiptRepo) CreateWithDetailsInTx(tx *gorm.DB, rc *model.PurchaseReceipt) error {
+func (r *PurchaseReceiptRepo) CreateWithDetailsInTx(tx *gorm.DB, t uint, rc *model.PurchaseReceipt) error {
+	rc.TenantID = t
 	if err := tx.Omit(clause.Associations).Create(rc).Error; err != nil {
 		return err
 	}
@@ -150,9 +154,9 @@ func (r *PurchaseReceiptRepo) CreateWithDetailsInTx(tx *gorm.DB, rc *model.Purch
 }
 
 // ListByPO returns all receipts (with details) of one PO, newest first.
-func (r *PurchaseReceiptRepo) ListByPO(poID uint, out *[]model.PurchaseReceipt) error {
+func (r *PurchaseReceiptRepo) ListByPO(t, poID uint, out *[]model.PurchaseReceipt) error {
 	return r.db.DB.Preload("Details").
-		Where("po_id = ?", poID).
+		Where("tenant_id = ? AND po_id = ?", t, poID).
 		Order("id DESC").
 		Find(out).Error
 }

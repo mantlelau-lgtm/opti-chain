@@ -19,3 +19,23 @@ type BaseModel struct {
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
+
+// TenantBaseModel extends BaseModel with the tenant discriminator. All
+// business/master-data tables embed it; composite uniqueness
+// (tenant_id + code) is enforced by migration SQL, not GORM tags.
+type TenantBaseModel struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID  uint      `gorm:"column:tenant_id;not null;default:0;index" json:"tenant_id"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+// Tenanted is implemented (via embedding) by every tenant-scoped model so the
+// repository layer can read/write the discriminator generically.
+type Tenanted interface {
+	SetTenantID(uint)
+	GetTenantID() uint
+}
+
+func (m *TenantBaseModel) SetTenantID(t uint) { m.TenantID = t }
+func (m *TenantBaseModel) GetTenantID() uint  { return m.TenantID }

@@ -17,16 +17,14 @@ const (
 
 // PurchaseOrder corresponds to pur_order.
 type PurchaseOrder struct {
-	ID               uint            `gorm:"primaryKey;autoIncrement" json:"id"`
-	PONumber         string          `gorm:"column:po_number;size:64;uniqueIndex;not null" json:"po_number"`
+	TenantBaseModel
+	PONumber         string          `gorm:"column:po_number;size:64;index;not null" json:"po_number"`
 	SupplierID       uint            `gorm:"column:supplier_id;not null;index" json:"supplier_id"`
 	OrderDate        time.Time       `gorm:"column:order_date;not null" json:"order_date"`
 	ExpectedDelivery *time.Time      `gorm:"column:expected_delivery_date" json:"expected_delivery_date"`
 	TotalAmount      decimal.Decimal `gorm:"column:total_amount;type:decimal(14,2);default:0" json:"total_amount"`
 	Status           string          `gorm:"column:status;size:32;default:DRAFT" json:"status"`
 	CreatedBy        string          `gorm:"column:created_by;size:64" json:"created_by"`
-	CreatedAt        time.Time       `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time       `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 
 	Details []PurchaseOrderDetail `gorm:"foreignKey:POID" json:"details,omitempty"`
 }
@@ -53,8 +51,8 @@ func (PurchaseOrderDetail) TableName() string { return "pur_order_detail" }
 // PurchaseReceipt corresponds to pur_receipt: one receiving round against a
 // PO. A PO can be received over multiple receipts (partial delivery).
 type PurchaseReceipt struct {
-	BaseModel
-	ReceiptNumber string    `gorm:"column:receipt_number;size:64;uniqueIndex;not null" json:"receipt_number"`
+	TenantBaseModel
+	ReceiptNumber string    `gorm:"column:receipt_number;size:64;index;not null" json:"receipt_number"`
 	POID          uint      `gorm:"column:po_id;not null;index" json:"po_id"`
 	WarehouseID   uint      `gorm:"column:warehouse_id;not null;index" json:"warehouse_id"`
 	ReceiptDate   time.Time `gorm:"column:receipt_date;not null" json:"receipt_date"`

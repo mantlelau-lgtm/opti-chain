@@ -54,7 +54,7 @@ func (h *InventoryHandler) MoveIn(c *gin.Context) {
 		return
 	}
 	req.OrderType = "PURCHASE_IN"
-	o, err := h.svc.MoveIn(toMove(req))
+	o, err := h.svc.MoveIn(tenantOf(c), toMove(req))
 	if mapErr(c, err) {
 		return
 	}
@@ -68,7 +68,7 @@ func (h *InventoryHandler) MoveOut(c *gin.Context) {
 		return
 	}
 	req.OrderType = "SALE_OUT"
-	o, err := h.svc.MoveOut(toMove(req))
+	o, err := h.svc.MoveOut(tenantOf(c), toMove(req))
 	if mapErr(c, err) {
 		return
 	}
@@ -76,7 +76,7 @@ func (h *InventoryHandler) MoveOut(c *gin.Context) {
 }
 
 func (h *InventoryHandler) ListOrders(c *gin.Context) {
-	list, total, err := h.svc.ListOrders(parsePage(c))
+	list, total, err := h.svc.ListOrders(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -84,7 +84,7 @@ func (h *InventoryHandler) ListOrders(c *gin.Context) {
 }
 
 func (h *InventoryHandler) GetOrder(c *gin.Context) {
-	o, err := h.svc.GetOrder(idParam(c))
+	o, err := h.svc.GetOrder(tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -92,14 +92,14 @@ func (h *InventoryHandler) GetOrder(c *gin.Context) {
 }
 
 func (h *InventoryHandler) DeleteOrder(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteOrder(idParam(c))) {
+	if mapErr(c, h.svc.DeleteOrder(tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
 }
 
 func (h *InventoryHandler) ListLogs(c *gin.Context) {
-	list, total, err := h.svc.ListLogs(parsePage(c))
+	list, total, err := h.svc.ListLogs(tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}

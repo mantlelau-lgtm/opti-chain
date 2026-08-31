@@ -8,46 +8,46 @@ import (
 
 // ---- Material ----
 
-type MaterialRepo struct{ *genericRepo[model.Material] }
+type MaterialRepo struct{ *tenantRepo[model.Material] }
 
 func NewMaterialRepo(db *gormDB) *MaterialRepo {
-	return &MaterialRepo{genericRepo: newGenericRepo[model.Material](db)}
+	return &MaterialRepo{tenantRepo: newTenantRepo[model.Material](db)}
 }
 
 func (r *MaterialRepo) List(f ListFilter, out *[]model.Material, total *int64) error {
-	return r.list(f, keywordLike(f, "sku_code", "name"), out, total)
+	return r.listT(f, keywordLike(f, "sku_code", "name"), out, total)
 }
 
 // ---- Supplier ----
 
-type SupplierRepo struct{ *genericRepo[model.Supplier] }
+type SupplierRepo struct{ *tenantRepo[model.Supplier] }
 
 func NewSupplierRepo(db *gormDB) *SupplierRepo {
-	return &SupplierRepo{genericRepo: newGenericRepo[model.Supplier](db)}
+	return &SupplierRepo{tenantRepo: newTenantRepo[model.Supplier](db)}
 }
 
 func (r *SupplierRepo) List(f ListFilter, out *[]model.Supplier, total *int64) error {
-	return r.list(f, keywordLike(f, "supplier_code", "name", "contact_person"), out, total)
+	return r.listT(f, keywordLike(f, "supplier_code", "name", "contact_person"), out, total)
 }
 
 // ---- Warehouse ----
 
-type WarehouseRepo struct{ *genericRepo[model.Warehouse] }
+type WarehouseRepo struct{ *tenantRepo[model.Warehouse] }
 
 func NewWarehouseRepo(db *gormDB) *WarehouseRepo {
-	return &WarehouseRepo{genericRepo: newGenericRepo[model.Warehouse](db)}
+	return &WarehouseRepo{tenantRepo: newTenantRepo[model.Warehouse](db)}
 }
 
 func (r *WarehouseRepo) List(f ListFilter, out *[]model.Warehouse, total *int64) error {
-	return r.list(f, keywordLike(f, "warehouse_code", "name"), out, total)
+	return r.listT(f, keywordLike(f, "warehouse_code", "name"), out, total)
 }
 
 // ---- Location ----
 
-type LocationRepo struct{ *genericRepo[model.Location] }
+type LocationRepo struct{ *tenantRepo[model.Location] }
 
 func NewLocationRepo(db *gormDB) *LocationRepo {
-	return &LocationRepo{genericRepo: newGenericRepo[model.Location](db)}
+	return &LocationRepo{tenantRepo: newTenantRepo[model.Location](db)}
 }
 
 func (r *LocationRepo) List(f ListFilter, out *[]model.Location, total *int64) error {
@@ -58,5 +58,5 @@ func (r *LocationRepo) List(f ListFilter, out *[]model.Location, total *int64) e
 		}
 		return q
 	}
-	return r.list(f, apply, out, total)
+	return r.listT(f, apply, out, total)
 }

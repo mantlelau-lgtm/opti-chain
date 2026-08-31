@@ -9,10 +9,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"scm/internal/pkg/authx"
 	"scm/internal/pkg/query"
 	"scm/internal/pkg/response"
 	"scm/internal/service"
 )
+
+// tenantOf resolves the tenant for data access: the authenticated actor's
+// tenant, or the seeded default tenant (id 1) when auth is disabled in dev.
+func tenantOf(c *gin.Context) uint {
+	if a := authx.GetActor(c); a != nil && a.TenantID != 0 {
+		return a.TenantID
+	}
+	return 1
+}
 
 // parsePage reads pagination from the query string.
 func parsePage(c *gin.Context) PageInput {

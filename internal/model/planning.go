@@ -26,8 +26,8 @@ const (
 
 // Demand corresponds to plan_demand.
 type Demand struct {
-	BaseModel
-	DemandNumber string          `gorm:"column:demand_number;size:64;uniqueIndex;not null" json:"demand_number"`
+	TenantBaseModel
+	DemandNumber string          `gorm:"column:demand_number;size:64;index;not null" json:"demand_number"`
 	MaterialID   uint            `gorm:"column:material_id;not null;index" json:"material_id"`
 	DemandQty    decimal.Decimal `gorm:"column:demand_qty;type:decimal(12,4);not null" json:"demand_qty"`
 	DemandDate   time.Time       `gorm:"column:demand_date;not null" json:"demand_date"`
@@ -39,7 +39,7 @@ func (Demand) TableName() string { return "plan_demand" }
 
 // MrpResult corresponds to plan_mrp_result.
 type MrpResult struct {
-	BaseModel
+	TenantBaseModel
 	MrpNumber       string          `gorm:"column:mrp_number;size:64;index" json:"mrp_number"`
 	MaterialID      uint            `gorm:"column:material_id;not null;index" json:"material_id"`
 	CurrentStock    decimal.Decimal `gorm:"column:current_stock;type:decimal(12,4);default:0" json:"current_stock"`

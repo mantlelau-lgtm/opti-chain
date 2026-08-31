@@ -5,10 +5,13 @@ package authx
 import "github.com/gin-gonic/gin"
 
 // Actor is the authenticated principal resolved from the bearer token.
+// TenantID scopes every data access; Roles drive permission checks.
 type Actor struct {
 	UserID   uint
 	Username string
 	Name     string
+	TenantID uint
+	Roles    []string
 }
 
 // ContextKey stores the Actor in gin.Context.
