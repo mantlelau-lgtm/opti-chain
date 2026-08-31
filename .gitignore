@@ -16,6 +16,9 @@ web/dist/
 scm.db
 *.db-journal
 
+# Local secrets
+.env
+
 # Editor / tooling
 .claude/
 .qwen/
