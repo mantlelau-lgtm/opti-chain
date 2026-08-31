@@ -9,7 +9,7 @@ const STATUS_COLOR = { idle: 'default', running: 'processing', done: 'success', 
 // 隐藏 DSN 中的密码，仅用于展示。
 function maskDsn(driver, dsn) {
   if (!dsn) return '-'
-  if (driver === 'mysql') return dsn.replace(/(:\/\/|:)[^:@]+@/, '$1***@').replace(/(:\/\/|:)***@/, ':***@')
+  if (driver === 'mysql') return dsn.replace(/^([^:]+):[^@]+@/, '$1:***@')
   if (driver === 'postgres') return dsn.replace(/password=\S+/, 'password=***')
   return dsn
 }
