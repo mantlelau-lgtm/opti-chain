@@ -12,7 +12,7 @@ export default function LocationPage() {
     let mounted = true
     warehouseApi.list({ page: 1, size: 200 }).then((r) => { if (mounted) setWarehouses(r.list) }).catch(() => {})
     return () => { mounted = false }
-     })
+     }, [])
    const whOptions = warehouses.map((w) => ({ label: w.name, value: w.id }))
 
    const resource = {
