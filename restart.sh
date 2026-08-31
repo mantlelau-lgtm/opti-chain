@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# 一键重启：停止旧进程 → 编译前后端 → 启动后端/Caddy/隧道 → 打印公网地址
+# 一键重启：停止旧进程 → 编译前后端 → 启动后端/Caddy/固定隧道
 # 用法：改完代码后在项目根目录执行  ./restart.sh
+# 公网地址固定为 https://scm.rockyjiang.org（cloudflared 命名隧道，重启不变）
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -23,7 +24,7 @@ kill_port() {
 }
 kill_port 8088
 kill_port 9090
-if pkill -f "cloudflared tunnel --url" 2>/dev/null; then
+if pkill -f "cloudflared tunnel" 2>/dev/null; then
   echo "    停止 cloudflared 隧道"
 fi
 sleep 2
@@ -41,14 +42,14 @@ echo "==> 4/5 启动服务"
 set -a; source .env 2>/dev/null || true; set +a
 nohup "$ROOT/bin/server" > "$LOG_DIR/server.log" 2>&1 &
 nohup "$CADDY" run --config "$ROOT/Caddyfile" --adapter caddyfile > "$LOG_DIR/caddy.log" 2>&1 &
-nohup "$CLOUDFLARED" tunnel --url http://127.0.0.1:9090 > "$LOG_DIR/tunnel.log" 2>&1 &
+nohup "$CLOUDFLARED" tunnel run scm > "$LOG_DIR/tunnel.log" 2>&1 &
 
-# 5) 等待隧道就绪并提取公网地址
-echo "==> 5/5 等待隧道建立"
-URL=""
+# 5) 等待隧道就绪
+echo "==> 5/5 等待隧道连接"
 for _ in $(seq 1 30); do
-  URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG_DIR/tunnel.log" 2>/dev/null | head -1 || true)
-  [ -n "$URL" ] && break
+  if grep -q "Registered tunnel connection" "$LOG_DIR/tunnel.log" 2>/dev/null; then
+    break
+  fi
   sleep 1
 done
 
@@ -56,9 +57,4 @@ echo ""
 echo "✅ 重启完成"
 echo "   本地:  http://localhost:9090"
 echo "   后端:  http://localhost:8088"
-if [ -n "$URL" ]; then
-  echo "   公网:  $URL"
-else
-  echo "   公网:  隧道尚未就绪，稍后执行："
-  echo "          grep -oE 'https://[a-z0-9-]+\\.trycloudflare\\.com' $LOG_DIR/tunnel.log | head -1"
-fi
+echo "   公网:  https://scm.rockyjiang.org（固定）"
