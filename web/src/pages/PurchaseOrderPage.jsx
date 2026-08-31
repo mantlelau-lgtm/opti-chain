@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Table, Button, Input, Space, Modal, Form, message, Tag,
-  Select, InputNumber, DatePicker, Popconfirm,
+  Select, InputNumber, DatePicker, Popconfirm, Radio,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { poApi, supplierApi, materialApi, locationApi, warehouseApi } from '../api/index.js'
+import { poApi, supplierApi, materialApi, locationApi, warehouseApi, productApi, bomApi, supplierMaterialApi } from '../api/index.js'
 
 // PO statuses mirror the backend constants (model/procurement.go).
 const PO_STATUS = [
@@ -39,6 +39,13 @@ export default function PurchaseOrderPage() {
   const [warehouses, setWarehouses] = useState([])
   const [form] = Form.useForm()
 
+  // ---- BOM-based ordering ----
+  const [orderMode, setOrderMode] = useState('manual') // manual | bom
+  const [products, setProducts] = useState([])
+  const [bomProductId, setBomProductId] = useState(undefined)
+  const [bomQty, setBomQty] = useState(1)
+  const [supPrices, setSupPrices] = useState({}) // material_id -> unit_price
+
   // ---- receiving (receive goods against a PO, with QC rejection) ----
   const [receiving, setReceiving] = useState(null)
   const [recvWh, setRecvWh] = useState(undefined)
@@ -55,12 +62,14 @@ export default function PurchaseOrderPage() {
        materialApi.list({ page: 1, size: 1000 }),
        locationApi.list({ page: 1, size: 1000 }),
        warehouseApi.list({ page: 1, size: 200 }),
-       ]).then(([s, m, l, w]) => {
+       productApi.list({ page: 1, size: 500 }),
+       ]).then(([s, m, l, w, p]) => {
        if (!mounted) return
        setSuppliers(s.list || [])
        setMaterials(m.list || [])
        setLocations(l.list || [])
        setWarehouses(w.list || [])
+       setProducts(p.list || [])
        }).catch(() => {})
      return () => { mounted = false }
      }, [])
@@ -77,12 +86,45 @@ export default function PurchaseOrderPage() {
 
   const openCreate = () => {
      setEditing(null)
+     setOrderMode('manual')
+     setBomProductId(undefined)
+     setBomQty(1)
+     setSupPrices({})
      form.resetFields()
      form.setFieldsValue({
         order_date: dayjs(),
         details: [{ material_id: undefined, order_qty: 1, unit_price: 0, location_id: undefined }],
       })
      setOpen(true)
+   }
+
+  // 选择供应商后，拉取该供应商的物料供应价，用于 BOM 展开时自动带出单价。
+  const onSupplierChange = (sid) => {
+     if (!sid) { setSupPrices({}); return }
+     supplierMaterialApi.list({ supplier_id: sid }).then((list) => {
+        const m = {}
+        ;(list || []).forEach((r) => { m[r.material_id] = r.unit_price })
+        setSupPrices(m)
+      }).catch(() => setSupPrices({}))
+   }
+
+  // 按产品默认 BOM 展开为采购明细（数量 = 单耗 × 产品数量，单价取供应关系）。
+  const expandBom = async () => {
+     if (!bomProductId) { message.warning('请选择产品'); return }
+     if (!bomQty || Number(bomQty) <= 0) { message.warning('请输入产品数量'); return }
+     try {
+        const versions = await bomApi.byProduct(bomProductId)
+        const def = (versions || []).find((b) => b.is_default)
+        if (!def) { message.warning('该产品无已发布的 BOM，请先在 BOM 管理页发布'); return }
+        const details = (def.details || []).map((d) => ({
+          material_id: d.component_id,
+          order_qty: Number(d.qty_per_unit) * Number(bomQty),
+          unit_price: Number(supPrices[d.component_id] ?? 0),
+          location_id: undefined,
+        }))
+        form.setFieldsValue({ details })
+        message.success(`已按 BOM 展开 ${details.length} 行明细，请补充确认单价`)
+      } catch (e) { message.error(e.message || '展开失败') }
    }
 
   // Editing only touches the header; details are view-only after creation.
@@ -215,6 +257,7 @@ export default function PurchaseOrderPage() {
 
   const supplierOpts = suppliers.map((s) => ({ label: s.name, value: s.id }))
   const materialOpts = materials.map((m) => ({ label: `${m.sku_code} ${m.name}`, value: m.id }))
+  const productOpts = products.map((p) => ({ label: `${p.product_code} ${p.name}`, value: p.id }))
   const locationOpts = locations.map((l) => ({ label: l.location_code, value: l.id }))
   const warehouseOpts = warehouses.map((w) => ({ label: w.name, value: w.id }))
   const materialName = (id) => materials.find((m) => m.id === id)?.name || id
@@ -320,7 +363,7 @@ export default function PurchaseOrderPage() {
             <Input placeholder="如 PO-2026-0001" disabled={!!editing} />
            </Form.Item>
            <Form.Item name="supplier_id" label="供应商" rules={[{ required: true, message: '请选择' }]}>
-            <Select options={supplierOpts} placeholder="选择供应商" showSearch optionFilterProp="label" />
+            <Select options={supplierOpts} placeholder="选择供应商" showSearch optionFilterProp="label" onChange={onSupplierChange} />
            </Form.Item>
            <Space size="large" align="start">
              <Form.Item name="order_date" label="下单日期">
@@ -334,6 +377,23 @@ export default function PurchaseOrderPage() {
              </Form.Item>
            </Space>
            <Form.Item label="订单明细" required>
+            {!editing && (
+              <Space style={{ marginBottom: 12 }} wrap>
+                <span>下单方式</span>
+                <Radio.Group value={orderMode} onChange={(e) => setOrderMode(e.target.value)}>
+                  <Radio.Button value="manual">手动明细</Radio.Button>
+                  <Radio.Button value="bom">基于 BOM</Radio.Button>
+                </Radio.Group>
+                {orderMode === 'bom' && (
+                  <>
+                    <Select style={{ width: 220 }} value={bomProductId} onChange={setBomProductId}
+                      options={productOpts} placeholder="选择产品（需已发布 BOM）" showSearch optionFilterProp="label" />
+                    <InputNumber min={0} step={0.0001} value={bomQty} onChange={(x) => setBomQty(x ?? 1)} style={{ width: 120 }} placeholder="产品数量" />
+                    <Button onClick={expandBom}>展开明细</Button>
+                  </>
+                )}
+              </Space>
+            )}
             <Form.List name="details">
              {(fields, { add, remove }) => (
                <div>
