@@ -5,7 +5,7 @@ import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
   FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
-  SettingOutlined, ExperimentOutlined, ApartmentOutlined,
+  SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined,
 } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 import { authApi } from '../api/index.js'
@@ -30,6 +30,7 @@ const items = [
   { key: '/inventory', icon: <ContainerOutlined />, label: '出入库', group: '仓储', perm: 'inv:move' },
   { key: '/planning', icon: <FundOutlined />, label: '计划/MRP', group: '计划', perm: 'demand:view' },
   { key: '/users', icon: <SettingOutlined />, label: '用户管理', group: '系统', perm: 'user:manage' },
+  { key: '/operation-logs', icon: <FileSearchOutlined />, label: '操作日志', group: '系统', perm: 'audit:view' },
 ]
 
 export default function MainLayout() {

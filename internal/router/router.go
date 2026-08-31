@@ -22,12 +22,13 @@ type Handlers struct {
 	RND       *handler.RNDHandler
 	SupMat    *handler.SupplierMaterialHandler
 	BOMOrder  *handler.BOMOrderHandler
+	AuditLog  *handler.OperationLogHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
 // verifies the bearer token and permMW enforces the DB-catalogued permission;
 // both protect every /api/v1 route except the public login endpoint.
-func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.Engine {
+func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc) *gin.Engine {
 	g := gin.New()
 	g.Use(middleware.Recovery())
 	g.Use(gin.Logger())
@@ -38,11 +39,12 @@ func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.En
 		api.POST("/auth/login", h.RBAC.Login)
 	}
 	protected := g.Group("/api/v1")
-	protected.Use(authMW, permMW)
+	protected.Use(authMW, permMW, auditMW)
 	{
 		protected.GET("/auth/me", h.RBAC.Me)
 		protected.GET("/rbac/catalog", h.RBAC.Catalog)
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
+		protected.GET("/operation-logs", h.AuditLog.List)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)

@@ -49,6 +49,7 @@ func main() {
 	productRepo := repository.NewProductRepo(gdb)
 	bomRepo := repository.NewBOMRepo(gdb)
 	supplierMaterialRepo := repository.NewSupplierMaterialRepo(gdb)
+	operationLogRepo := repository.NewOperationLogRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
@@ -59,6 +60,9 @@ func main() {
 	}
 	if err := service.EnsureRNDCatalog(db.DB); err != nil {
 		log.Fatalf("seed rnd catalog: %v", err)
+	}
+	if err := service.EnsureAuditCatalog(db.DB); err != nil {
+		log.Fatalf("seed audit catalog: %v", err)
 	}
 	rbacSvc := service.NewRBACService(service.RBACDeps{
 		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
@@ -101,6 +105,7 @@ func main() {
 		DB:        db.DB,
 	})
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
+	auditSvc := service.NewAuditService(operationLogRepo, tenantRepo)
 	bomOrderSvc := service.NewBOMOrderService(service.BOMOrderDeps{
 		BOM:       bomRepo,
 		SupMat:    supplierMaterialRepo,
@@ -131,12 +136,14 @@ func main() {
 		RND:       handler.NewRNDHandler(productSvc, bomSvc),
 		SupMat:    handler.NewSupplierMaterialHandler(supplierMaterialSvc),
 		BOMOrder:  handler.NewBOMOrderHandler(bomOrderSvc),
+		AuditLog:  handler.NewOperationLogHandler(auditSvc),
 	}
 
 	// 5) Router + start.
 	authMW := middleware.Auth(cfg.Auth.Enabled, authSvc.ParseToken)
 	permMW := middleware.RequirePerm(cfg.Auth.Enabled, rbacSvc.Check)
-	engine := router.New(cfg.Server.CORSOrigin, h, authMW, permMW)
+	auditMW := middleware.Audit(cfg.Auth.Enabled, auditSvc)
+	engine := router.New(cfg.Server.CORSOrigin, h, authMW, permMW, auditMW)
 	if !cfg.Auth.Enabled {
 		log.Printf("WARNING: SCM_AUTH=off — authentication disabled (dev only)")
 	}

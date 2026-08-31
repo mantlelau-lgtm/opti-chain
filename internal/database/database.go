@@ -74,6 +74,7 @@ func Migrate(gdb *gorm.DB) error {
 		&model.BOM{},
 		&model.BOMDetail{},
 		&model.SupplierMaterial{},
+		&model.OperationLog{},
 		&model.Tenant{},
 		&model.Module{},
 		&model.Permission{},

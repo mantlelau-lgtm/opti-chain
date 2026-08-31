@@ -100,6 +100,9 @@ export const bomOrderApi = {
   preview: (d) => client.post('/bom-order/preview', d),
   confirm: (d) => client.post('/bom-order/confirm', d),
 }
+export const operationLogApi = {
+  list: (params) => client.get('/operation-logs', { params }),
+}
 
 // ---- R&D / BOM ----
 export const productApi = {

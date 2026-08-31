@@ -14,6 +14,7 @@ import SalesOrderPage from './pages/SalesOrderPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import TenantsPage from './pages/TenantsPage.jsx'
 import RolesPage from './pages/RolesPage.jsx'
+import OperationLogPage from './pages/OperationLogPage.jsx'
 import BOMPage from './pages/BOMPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
@@ -45,6 +46,7 @@ export default function App() {
           <Route index element={<Navigate to="/admin/tenants" replace />} />
           <Route path="tenants" element={<TenantsPage />} />
           <Route path="roles" element={<RolesPage />} />
+          <Route path="logs" element={<OperationLogPage />} />
         </Route>
 
         {/* 业务系统（租户） */}
@@ -59,6 +61,7 @@ export default function App() {
           <Route path="purchase-orders" element={<PurchaseOrderPage />} />
           <Route path="sales-orders" element={<SalesOrderPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="operation-logs" element={<OperationLogPage />} />
           <Route path="boms" element={<BOMPage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="inventory" element={<InventoryPage />} />

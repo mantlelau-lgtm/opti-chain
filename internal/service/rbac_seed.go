@@ -234,6 +234,47 @@ func EnsureRNDCatalog(db *gorm.DB) error {
 	return nil
 }
 
+// EnsureAuditCatalog idempotently adds the audit:view permission (system
+// module) and grants it to admin + manager/supervisor roles.
+func EnsureAuditCatalog(db *gorm.DB) error {
+	var mod model.Module
+	if err := db.Where("code = ?", "system").First(&mod).Error; err != nil {
+		return err
+	}
+	var perm model.Permission
+	if err := db.Where("code = ?", "audit:view").First(&perm).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		perm = model.Permission{Code: "audit:view", Name: "操作日志查看", ModuleID: mod.ID}
+		if err := db.Create(&perm).Error; err != nil {
+			return err
+		}
+	}
+	grantTo := []string{
+		model.RoleAdmin, model.RoleProcMgr, model.RolePlanSup, model.RoleWhMgr,
+	}
+	var roles []model.Role
+	if err := db.Find(&roles).Error; err != nil {
+		return err
+	}
+	roleID := map[string]uint{}
+	for _, r := range roles {
+		roleID[r.Code] = r.ID
+	}
+	for _, rc := range grantTo {
+		var cnt int64
+		db.Model(&model.RolePermission{}).
+			Where("role_id = ? AND permission_id = ?", roleID[rc], perm.ID).Count(&cnt)
+		if cnt == 0 && roleID[rc] != 0 {
+			if err := db.Create(&model.RolePermission{RoleID: roleID[rc], PermissionID: perm.ID}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // MigrateRoles replaces the legacy six-role set with the current seven-role
 // design on an EXISTING database: wipes roles/matrix/assignments, re-seeds the
 // new roles and matrix, and remaps users from old roles to the closest new
