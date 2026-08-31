@@ -24,6 +24,15 @@ func tenantOf(c *gin.Context) uint {
 	return 1
 }
 
+// actorUsername returns the current operator's username (empty when auth is
+// disabled), used to stamp created_by / updated_by.
+func actorUsername(c *gin.Context) string {
+	if a := authx.GetActor(c); a != nil {
+		return a.Username
+	}
+	return ""
+}
+
 // parsePage reads pagination from the query string.
 func parsePage(c *gin.Context) PageInput {
 	var p query.Page

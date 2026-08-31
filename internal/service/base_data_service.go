@@ -24,7 +24,17 @@ func (s *MaterialService) Create(t uint, m *model.Material) error {
 }
 
 func (s *MaterialService) Update(t, id uint, m *model.Material) error {
+	old, err := s.repo.Get(t, id)
+	if old == nil {
+		return errNotFound(id)
+	}
+	if err != nil {
+		return err
+	}
 	m.ID = id
+	if m.CreatedBy == "" {
+		m.CreatedBy = old.CreatedBy
+	}
 	return s.repo.Update(t, m)
 }
 
@@ -64,7 +74,17 @@ func (s *SupplierService) Create(t uint, m *model.Supplier) error {
 }
 
 func (s *SupplierService) Update(t, id uint, m *model.Supplier) error {
+	old, err := s.repo.Get(t, id)
+	if old == nil {
+		return errNotFound(id)
+	}
+	if err != nil {
+		return err
+	}
 	m.ID = id
+	if m.CreatedBy == "" {
+		m.CreatedBy = old.CreatedBy
+	}
 	return s.repo.Update(t, m)
 }
 
@@ -124,7 +144,17 @@ func (s *WarehouseService) Create(t uint, m *model.Warehouse) error {
 }
 
 func (s *WarehouseService) Update(t, id uint, m *model.Warehouse) error {
+	old, err := s.repo.Get(t, id)
+	if old == nil {
+		return errNotFound(id)
+	}
+	if err != nil {
+		return err
+	}
 	m.ID = id
+	if m.CreatedBy == "" {
+		m.CreatedBy = old.CreatedBy
+	}
 	return s.repo.Update(t, m)
 }
 
@@ -164,7 +194,17 @@ func (s *LocationService) Create(t uint, m *model.Location) error {
 }
 
 func (s *LocationService) Update(t, id uint, m *model.Location) error {
+	old, err := s.repo.Get(t, id)
+	if old == nil {
+		return errNotFound(id)
+	}
+	if err != nil {
+		return err
+	}
 	m.ID = id
+	if m.CreatedBy == "" {
+		m.CreatedBy = old.CreatedBy
+	}
 	return s.repo.Update(t, m)
 }
 

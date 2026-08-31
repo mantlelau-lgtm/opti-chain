@@ -26,6 +26,8 @@ type BaseModel struct {
 type TenantBaseModel struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	TenantID  uint      `gorm:"column:tenant_id;not null;default:0;index" json:"tenant_id"`
+	CreatedBy string    `gorm:"column:created_by;size:64" json:"created_by"`
+	UpdatedBy string    `gorm:"column:updated_by;size:64" json:"updated_by"`
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }

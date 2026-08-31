@@ -27,7 +27,17 @@ func (s *CustomerService) Create(t uint, m *model.Customer) error {
 }
 
 func (s *CustomerService) Update(t, id uint, m *model.Customer) error {
+	old, err := s.repo.Get(t, id)
+	if old == nil {
+		return errNotFound(id)
+	}
+	if err != nil {
+		return err
+	}
 	m.ID = id
+	if m.CreatedBy == "" {
+		m.CreatedBy = old.CreatedBy
+	}
 	return s.repo.Update(t, m)
 }
 
@@ -81,11 +91,11 @@ func NewSalesOrderService(d SalesOrderDeps) *SalesOrderService {
 
 // CreateSOInput is the request payload for creating a sales order.
 type CreateSOInput struct {
-	SONumber  string
+	SONumber   string
 	CustomerID uint
-	OrderDate time.Time
+	OrderDate  time.Time
 	CreatedBy  string
-	Details   []SODetailInput
+	Details    []SODetailInput
 }
 
 // SODetailInput is a single SO line.

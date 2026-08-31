@@ -73,8 +73,14 @@ export default function CrudTable({ resource }) {
       }
    }
 
+  const fmtTime = (v) => (v ? String(v).slice(0, 19).replace('T', ' ') : '-')
+
   const cols = [
      ...columns,
+     { title: '创建人', dataIndex: 'created_by', width: 90, render: (v) => v || '-' },
+     { title: '创建时间', dataIndex: 'created_at', width: 160, render: fmtTime },
+     { title: '更新人', dataIndex: 'updated_by', width: 90, render: (v) => v || '-' },
+     { title: '更新时间', dataIndex: 'updated_at', width: 160, render: fmtTime },
      {
       title: '操作',
       key: 'action',

@@ -45,6 +45,8 @@ func (h *SalesHandler) CustomerCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.CreatedBy = actorUsername(c)
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Customers.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
@@ -57,6 +59,7 @@ func (h *SalesHandler) CustomerUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Customers.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}

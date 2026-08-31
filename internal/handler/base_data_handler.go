@@ -45,6 +45,8 @@ func (h *BaseDataHandler) MaterialCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.CreatedBy = actorUsername(c)
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Material.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
@@ -57,6 +59,7 @@ func (h *BaseDataHandler) MaterialUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Material.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
@@ -94,6 +97,8 @@ func (h *BaseDataHandler) SupplierCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.CreatedBy = actorUsername(c)
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Supplier.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
@@ -106,6 +111,7 @@ func (h *BaseDataHandler) SupplierUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Supplier.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
@@ -159,6 +165,8 @@ func (h *BaseDataHandler) WarehouseCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.CreatedBy = actorUsername(c)
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Warehouse.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
@@ -171,6 +179,7 @@ func (h *BaseDataHandler) WarehouseUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Warehouse.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
@@ -208,6 +217,8 @@ func (h *BaseDataHandler) LocationCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.CreatedBy = actorUsername(c)
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Location.Create(tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
@@ -220,6 +231,7 @@ func (h *BaseDataHandler) LocationUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
+	m.UpdatedBy = actorUsername(c)
 	if err := h.Location.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
