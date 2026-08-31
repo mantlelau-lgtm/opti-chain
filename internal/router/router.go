@@ -40,6 +40,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.En
 	{
 		protected.GET("/auth/me", h.RBAC.Me)
 		protected.GET("/rbac/catalog", h.RBAC.Catalog)
+		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)

@@ -225,14 +225,35 @@ func (s *RBACService) ListTenants(in PageInput) ([]model.Tenant, int64, error) {
 	return out, total, nil
 }
 
-func (s *RBACService) CreateTenant(t *model.Tenant) error {
+// IsPlatform reports whether the tenant id is the platform tenant.
+func (s *RBACService) IsPlatform(t uint) bool {
+	tn, err := s.tenants.Get(t)
+	return err == nil && tn != nil && tn.Code == "platform"
+}
+
+// CreateTenant provisions a tenant and auto-creates its first admin account
+// (username "admin", password admin123). Returns the tenant and the admin
+// credentials for the platform operator to hand over.
+func (s *RBACService) CreateTenant(t *model.Tenant) (*model.Tenant, string, error) {
 	if t.Code == "" || t.Name == "" {
-		return errorsBadRequest("code/name are required")
+		return nil, "", errorsBadRequest("code/name are required")
 	}
 	if existing, _ := s.tenants.GetByCode(t.Code); existing != nil {
-		return errf(ErrConflict, "tenant code already exists")
+		return nil, "", errf(ErrConflict, "tenant code already exists")
 	}
-	return s.tenants.Create(t)
+	if err := s.tenants.Create(t); err != nil {
+		return nil, "", err
+	}
+	const adminPass = "admin123"
+	if _, err := s.CreateUser(t.ID, CreateUserInput{
+		Username:  "admin",
+		Password:  adminPass,
+		Name:      "管理员",
+		RoleCodes: []string{model.RoleAdmin},
+	}); err != nil {
+		return nil, "", err
+	}
+	return t, adminPass, nil
 }
 
 // UpdateTenant edits name/plan/status (suspend lives here).
@@ -272,9 +293,12 @@ func (s *RBACService) CreateUser(t uint, in CreateUserInput) (*model.User, error
 	if in.Username == "" || in.Password == "" {
 		return nil, errorsBadRequest("username/password are required")
 	}
-	// Platform admins may provision users into any tenant by tenant_code;
-	// everyone else only manages users of their own tenant.
+	// Only the platform tenant may provision users into another tenant by
+	// tenant_code; tenant admins can only manage their own users.
 	if in.TenantCode != "" {
+		if !s.IsPlatform(t) {
+			return nil, errf(ErrForbidden, "only the platform can create users in other tenants")
+		}
 		target, err := s.tenants.GetByCode(in.TenantCode)
 		if err != nil {
 			return nil, err
@@ -361,7 +385,8 @@ func (s *RBACService) setRoleCodes(userID uint, codes []string) error {
 	return s.userRol.SetRoles(userID, ids)
 }
 
-// Catalog returns modules+permissions+roles for the admin UI.
+// Catalog returns modules+permissions+roles plus the role→permission matrix
+// for the platform console.
 func (s *RBACService) Catalog() (map[string]any, error) {
 	modules, err := s.modules.All()
 	if err != nil {
@@ -375,6 +400,61 @@ func (s *RBACService) Catalog() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"modules": modules, "permissions": perms, "roles": roles}, nil
+	var rps []model.RolePermission
+	if err := s.db.Find(&rps).Error; err != nil {
+		return nil, err
+	}
+	permCode := map[uint]string{}
+	for _, p := range perms {
+		permCode[p.ID] = p.Code
+	}
+	roleCode := map[uint]string{}
+	for _, r := range roles {
+		roleCode[r.ID] = r.Code
+	}
+	rolePerms := map[string][]string{}
+	for _, rp := range rps {
+		rc, ok := roleCode[rp.RoleID]
+		if !ok {
+			continue
+		}
+		rolePerms[rc] = append(rolePerms[rc], permCode[rp.PermissionID])
+	}
+	return map[string]any{
+		"modules": modules, "permissions": perms, "roles": roles, "role_perms": rolePerms,
+	}, nil
+}
+
+// SetRolePermissions replaces a role's permission set (platform-only).
+// The change is reflected in the in-memory cache immediately.
+func (s *RBACService) SetRolePermissions(roleID uint, permCodes []string) error {
+	var perms []model.Permission
+	if err := s.db.Find(&perms).Error; err != nil {
+		return err
+	}
+	permID := map[string]uint{}
+	for _, p := range perms {
+		permID[p.Code] = p.ID
+	}
+	var ids []uint
+	for _, c := range permCodes {
+		if id, ok := permID[c]; ok {
+			ids = append(ids, id)
+		}
+	}
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", roleID).Delete(&model.RolePermission{}).Error; err != nil {
+			return err
+		}
+		for _, pid := range ids {
+			if err := tx.Create(&model.RolePermission{RoleID: roleID, PermissionID: pid}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return s.RefreshCache()
 }
 

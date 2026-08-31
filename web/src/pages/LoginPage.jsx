@@ -21,7 +21,7 @@ export default function LoginPage() {
         auth.setPerms(me.perms || [])
       } catch { /* token accepted; perms will refresh on next load */ }
       message.success(`欢迎，${data.user.name || data.user.username}`)
-      navigate('/', { replace: true })
+      navigate(data.user.tenant === 'platform' ? '/admin' : '/', { replace: true })
     } catch (e) {
       message.error(e.message || '登录失败')
     } finally {

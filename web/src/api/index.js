@@ -5,6 +5,7 @@ export const authApi = {
   login: (d) => client.post('/auth/login', d),
   me: () => client.get('/auth/me'),
   catalog: () => client.get('/rbac/catalog'),
+  setRolePermissions: (id, permCodes) => client.put(`/rbac/roles/${id}/permissions`, { perm_codes: permCodes }),
 }
 export const tenantApi = {
   list: (p) => api.list('/tenants', p),

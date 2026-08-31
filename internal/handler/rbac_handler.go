@@ -67,7 +67,19 @@ func (h *RBACHandler) Catalog(c *gin.Context) {
 
 // ---- tenants (platform scope) ----
 
+// requirePlatform aborts with 403 unless the caller is the platform tenant.
+func (h *RBACHandler) requirePlatform(c *gin.Context) bool {
+	if h.svc.IsPlatform(tenantOf(c)) {
+		return true
+	}
+	response.HTTPFail(c, 403, response.ErrForbidden, "platform only")
+	return false
+}
+
 func (h *RBACHandler) TenantList(c *gin.Context) {
+	if !h.requirePlatform(c) {
+		return
+	}
 	list, total, err := h.svc.ListTenants(parsePage(c))
 	if mapErr(c, err) {
 		return
@@ -76,18 +88,29 @@ func (h *RBACHandler) TenantList(c *gin.Context) {
 }
 
 func (h *RBACHandler) TenantCreate(c *gin.Context) {
+	if !h.requirePlatform(c) {
+		return
+	}
 	var t model.Tenant
 	if err := c.ShouldBindJSON(&t); err != nil {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.svc.CreateTenant(&t); mapErr(c, err) {
+	tenant, adminPass, err := h.svc.CreateTenant(&t)
+	if mapErr(c, err) {
 		return
 	}
-	response.OK(c, t)
+	response.OK(c, gin.H{
+		"tenant":         tenant,
+		"admin_username": "admin",
+		"admin_password": adminPass,
+	})
 }
 
 func (h *RBACHandler) TenantUpdate(c *gin.Context) {
+	if !h.requirePlatform(c) {
+		return
+	}
 	var t model.Tenant
 	if err := c.ShouldBindJSON(&t); err != nil {
 		response.Fail(c, response.ErrBadRequest, err.Error())
@@ -97,6 +120,24 @@ func (h *RBACHandler) TenantUpdate(c *gin.Context) {
 		return
 	}
 	response.OK(c, t)
+}
+
+// RoleSetPermissions replaces a role's permission set (platform console).
+func (h *RBACHandler) RoleSetPermissions(c *gin.Context) {
+	if !h.requirePlatform(c) {
+		return
+	}
+	var body struct {
+		PermCodes []string `json:"perm_codes"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, response.ErrBadRequest, err.Error())
+		return
+	}
+	if err := h.svc.SetRolePermissions(idParam(c), body.PermCodes); mapErr(c, err) {
+		return
+	}
+	response.OK(c, gin.H{"id": idParam(c)})
 }
 
 // ---- users (tenant scope) ----
