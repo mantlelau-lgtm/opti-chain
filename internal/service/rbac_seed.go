@@ -8,11 +8,6 @@ import (
 
 	"scm/internal/model"
 )
-
-// SeedRBAC bootstraps tenants, the six roles, module/permission catalogs, the
-// RACI permission matrix and initial admin users. Idempotent: it only runs
-// while the tenant table is empty. Existing pre-tenant business rows are
-// adopted by the demo tenant.
 func SeedRBAC(db *gorm.DB) error {
 	var count int64
 	if err := db.Model(&model.Tenant{}).Count(&count).Error; err != nil {
@@ -155,6 +150,72 @@ func SeedRBAC(db *gorm.DB) error {
 	} {
 		if err := db.Exec("UPDATE "+t+" SET tenant_id = ? WHERE tenant_id = 0", demo.ID).Error; err != nil {
 			log.Printf("seed: adopt %s: %v", t, err)
+		}
+	}
+	return nil
+}
+
+// EnsureRNDCatalog idempotently adds the R&D module + BOM permissions to an
+// existing deployment (SeedRBAC skips everything once tenants exist, so later
+// catalog additions need their own find-or-create step).
+func EnsureRNDCatalog(db *gorm.DB) error {
+	var mod model.Module
+	if err := db.Where("code = ?", "rnd").First(&mod).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		mod = model.Module{Code: "rnd", Name: "研发", Sort: 0}
+		if err := db.Create(&mod).Error; err != nil {
+			return err
+		}
+	}
+
+	permDefs := []struct{ code, name string }{
+		{"bom:view", "BOM 查看"},
+		{"bom:edit", "BOM 编辑"},
+		{"bom:release", "BOM 发布"},
+	}
+	permID := map[string]uint{}
+	for _, p := range permDefs {
+		var existing model.Permission
+		if err := db.Where("code = ?", p.code).First(&existing).Error; err == nil {
+			permID[p.code] = existing.ID
+			continue
+		}
+		np := model.Permission{Code: p.code, Name: p.name, ModuleID: mod.ID}
+		if err := db.Create(&np).Error; err != nil {
+			return err
+		}
+		permID[p.code] = np.ID
+	}
+
+	// role -> permission matrix additions (RACI-aligned).
+	matrix := map[string][]string{
+		model.RoleAdmin:         {"bom:view", "bom:edit", "bom:release"},
+		model.RoleCategoryMgr:   {"bom:view", "bom:edit", "bom:release"},
+		model.RoleProcAssistant: {"bom:view", "bom:edit"},
+		model.RoleCommittee:     {"bom:view", "bom:release"},
+		model.RoleQCWH:          {"bom:view"},
+		model.RoleFinance:       {"bom:view"},
+	}
+	var roles []model.Role
+	if err := db.Find(&roles).Error; err != nil {
+		return err
+	}
+	roleID := map[string]uint{}
+	for _, r := range roles {
+		roleID[r.Code] = r.ID
+	}
+	for rc, codes := range matrix {
+		for _, pc := range codes {
+			var cnt int64
+			db.Model(&model.RolePermission{}).
+				Where("role_id = ? AND permission_id = ?", roleID[rc], permID[pc]).Count(&cnt)
+			if cnt == 0 {
+				if err := db.Create(&model.RolePermission{RoleID: roleID[rc], PermissionID: permID[pc]}).Error; err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

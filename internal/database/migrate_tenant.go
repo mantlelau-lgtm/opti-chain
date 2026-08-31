@@ -22,6 +22,8 @@ var legacyUniqueColumns = map[string]string{
 	"inv_order":     "order_number",
 	"plan_demand":   "demand_number",
 	"sys_user":      "username",
+	"base_product":  "product_code",
+	"base_bom":      "bom_no",
 }
 
 // MigrateTenantIndexes upgrades single-column unique indexes to composite

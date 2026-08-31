@@ -1,0 +1,16 @@
+# SCM local reverse proxy: static frontend + /api -> Go backend.
+# cloudflared terminates public HTTPS and forwards here. :8080 is taken by
+# llm-gw, so the local listener is :9090.
+:9090 {
+    root * /Users/rocky/CodingSpace/opti-chain/web/dist
+
+    # API 走反向代理（互斥路由，避免被静态文件处理器拦截）
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8088
+    }
+    # 其余路径：SPA 静态资源 + 路由回退
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}

@@ -46,10 +46,15 @@ func main() {
 	moduleRepo := repository.NewModuleRepo(gdb)
 	permRepo := repository.NewPermissionRepo(gdb)
 	userRoleRepo := repository.NewUserRoleRepo(gdb)
+	productRepo := repository.NewProductRepo(gdb)
+	bomRepo := repository.NewBOMRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
 		log.Fatalf("seed rbac: %v", err)
+	}
+	if err := service.EnsureRNDCatalog(db.DB); err != nil {
+		log.Fatalf("seed rnd catalog: %v", err)
 	}
 	rbacSvc := service.NewRBACService(service.RBACDeps{
 		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
@@ -84,6 +89,13 @@ func main() {
 		DB:        db.DB,
 	})
 	stockSvc := service.NewStockService(stockRepo)
+	productSvc := service.NewProductService(productRepo)
+	bomSvc := service.NewBOMService(service.BOMDeps{
+		Repo:      bomRepo,
+		Products:  productRepo,
+		Materials: materialRepo,
+		DB:        db.DB,
+	})
 	planningSvc := service.NewPlanningService(service.PlanningDeps{
 		Demand:   demandRepo,
 		Mrp:      mrpRepo,
@@ -103,6 +115,7 @@ func main() {
 		Inventory: handler.NewInventoryHandler(invSvc),
 		Stock:     handler.NewStockHandler(stockSvc),
 		Planning:  handler.NewPlanningHandler(planningSvc),
+		RND:       handler.NewRNDHandler(productSvc, bomSvc),
 	}
 
 	// 5) Router + start.

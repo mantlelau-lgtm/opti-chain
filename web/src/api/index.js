@@ -88,6 +88,24 @@ export const soApi = {
   remove: (id) => api.remove(`/so/${id}`),
 }
 
+// ---- R&D / BOM ----
+export const productApi = {
+  list: (p) => api.list('/products', p),
+  get: (id) => api.get(`/products/${id}`),
+  create: (d) => api.create('/products', d),
+  update: (id, d) => api.update(`/products/${id}`, d),
+  remove: (id) => api.remove(`/products/${id}`),
+}
+export const bomApi = {
+  list: (p) => api.list('/boms', p),
+  get: (id) => api.get(`/boms/${id}`),
+  byProduct: (pid) => client.get(`/boms/product/${pid}`),
+  create: (d) => api.create('/boms', d),
+  update: (id, d) => api.update(`/boms/${id}`, d),
+  release: (id) => api.update(`/boms/${id}/release`),
+  remove: (id) => api.remove(`/boms/${id}`),
+}
+
 // ---- Inventory ----
 export const inventoryApi = {
   stock: (p) => api.list('/inventory/stock', p),

@@ -1,5 +1,13 @@
 # 版本变更记录
 
+## [0.3.0] - 2026-08-31
+
+### Added
+- 研发模块：产品主档（独立表 base_product）、版本化 BOM（base_bom / base_bom_detail）
+- BOM 生命周期：DRAFT 编辑/删除 → 发布 RELEASED（自动作废旧默认版、成为生效版本），已发布不可改
+- 权限：新增 rnd 模块 + bom:view/edit/release 权限点（幂等种子，老库自动补）
+- 前端：BOM 管理页（产品选择、版本列表、组件明细编辑、发布/删除）
+
 ## [Unreleased]
 
 ### Added

@@ -19,6 +19,7 @@ type Handlers struct {
 	Inventory *handler.InventoryHandler
 	Stock     *handler.StockHandler
 	Planning  *handler.PlanningHandler
+	RND       *handler.RNDHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -44,9 +45,31 @@ func New(corsOrigin string, h *Handlers, authMW, permMW gin.HandlerFunc) *gin.En
 		registerSales(protected, h.Sales)
 		registerInventory(protected, h.Inventory, h.Stock)
 		registerPlanning(protected, h.Planning)
+		registerRND(protected, h.RND)
 		registerRBAC(protected, h.RBAC)
 	}
 	return g
+}
+
+func registerRND(g *gin.RouterGroup, h *handler.RNDHandler) {
+	p := g.Group("/products")
+	{
+		p.GET("", h.ProductList)
+		p.GET("/:id", h.ProductGet)
+		p.POST("", h.ProductCreate)
+		p.PUT("/:id", h.ProductUpdate)
+		p.DELETE("/:id", h.ProductDelete)
+	}
+	b := g.Group("/boms")
+	{
+		b.GET("", h.BOMList)
+		b.GET("/product/:pid", h.BOMListByProduct)
+		b.GET("/:id", h.BOMGet)
+		b.POST("", h.BOMCreate)
+		b.PUT("/:id", h.BOMUpdate)
+		b.PUT("/:id/release", h.BOMRelease)
+		b.DELETE("/:id", h.BOMDelete)
+	}
 }
 
 func registerRBAC(g *gin.RouterGroup, h *handler.RBACHandler) {
