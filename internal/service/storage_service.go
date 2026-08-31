@@ -154,16 +154,19 @@ func (s *StorageService) run(ds *model.DataSource) {
 		defer sqlDB.Close()
 	}
 
-	// Disable FK enforcement so parent/child copy order doesn't matter.
-	disableFK(gdb, ds.Driver)
-	defer enableFK(gdb, ds.Driver)
+	models := database.Models()
+
+	// Drop any existing app tables in the target first, so re-running a
+	// migration into a non-empty target is idempotent (no PK collisions).
+	for i := len(models) - 1; i >= 0; i-- {
+		_ = gdb.Migrator().DropTable(models[i])
+	}
 
 	if err := database.Migrate(gdb); err != nil {
 		s.fail("migrate target schema: " + err.Error())
 		return
 	}
 
-	models := database.Models()
 	// total row count for the progress bar.
 	var totalRows int64
 	tableNames := make([]string, 0, len(models))
@@ -177,23 +180,33 @@ func (s *StorageService) run(ds *model.DataSource) {
 	}
 	s.setRunning(ds.Name, "准备复制", len(models), 0, totalRows)
 
+	// Copy inside ONE transaction so the FK-disabling statement and the INSERTs
+	// share a single pooled connection (MySQL's FOREIGN_KEY_CHECKS is
+	// session-scoped). This tolerates orphaned detail rows from the source.
 	var doneRows int64
-	for i, m := range models {
-		name := m.(tabler).TableName()
-		s.mu.Lock()
-		s.state.CurrentTable = name
-		s.mu.Unlock()
+	err = gdb.Transaction(func(tx *gorm.DB) error {
+		disableFK(tx, ds.Driver)
+		for i, m := range models {
+			name := m.(tabler).TableName()
+			s.mu.Lock()
+			s.state.CurrentTable = name
+			s.mu.Unlock()
 
-		n, err := s.copyTable(s.db, gdb, m)
-		if err != nil {
-			s.fail(fmt.Sprintf("copy table %s: %v", name, err))
-			return
+			n, err := s.copyTable(s.db, tx, m)
+			if err != nil {
+				return fmt.Errorf("copy table %s: %w", name, err)
+			}
+			doneRows += n
+			s.mu.Lock()
+			s.state.DoneTables = i + 1
+			s.state.DoneRows = doneRows
+			s.mu.Unlock()
 		}
-		doneRows += n
-		s.mu.Lock()
-		s.state.DoneTables = i + 1
-		s.state.DoneRows = doneRows
-		s.mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		s.fail(err.Error())
+		return
 	}
 
 	// Postgres: sequences must advance past the copied max ids.
