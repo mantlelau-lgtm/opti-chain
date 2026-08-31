@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -62,15 +63,21 @@ type BOMOrderPlan struct {
 	Warnings []string        `json:"warnings"`
 }
 
-// Preview expands a product's default BOM, resolves a supplier per material
-// and groups the result by supplier. No writes.
-func (s *BOMOrderService) Preview(t, productID uint, qty decimal.Decimal) (*BOMOrderPlan, error) {
-	return s.resolve(t, productID, qty)
+// BOMOrderLine is one product and its required quantity in a multi-BOM order.
+type BOMOrderLine struct {
+	ProductID uint            `json:"product_id"`
+	Qty       decimal.Decimal `json:"qty"`
+}
+
+// Preview expands the products' default BOMs (aggregating shared materials),
+// resolves a supplier per material and groups the result by supplier. No writes.
+func (s *BOMOrderService) Preview(t uint, items []BOMOrderLine) (*BOMOrderPlan, error) {
+	return s.resolve(t, items)
 }
 
 // Create re-resolves the plan and creates one DRAFT PO per supplier.
-func (s *BOMOrderService) Create(t, productID uint, qty decimal.Decimal, orderDate time.Time) ([]*model.PurchaseOrder, error) {
-	plan, err := s.resolve(t, productID, qty)
+func (s *BOMOrderService) Create(t uint, items []BOMOrderLine, orderDate time.Time) ([]*model.PurchaseOrder, error) {
+	plan, err := s.resolve(t, items)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +99,7 @@ func (s *BOMOrderService) Create(t, productID uint, qty decimal.Decimal, orderDa
 			})
 		}
 		po, err := s.posvc.Create(t, CreatePOInput{
-			PONumber:   fmt.Sprintf("BOM-%d-%d-%s", productID, i+1, ts),
+			PONumber:   fmt.Sprintf("BOM-%s-%d", ts, i+1),
 			SupplierID: g.SupplierID,
 			OrderDate:  orderDate,
 			Details:    details,
@@ -105,26 +112,48 @@ func (s *BOMOrderService) Create(t, productID uint, qty decimal.Decimal, orderDa
 	return orders, nil
 }
 
-func (s *BOMOrderService) resolve(t, productID uint, qty decimal.Decimal) (*BOMOrderPlan, error) {
-	if qty.LessThanOrEqual(decimal.Zero) {
-		return nil, errorsBadRequest("qty must be positive")
+func (s *BOMOrderService) resolve(t uint, items []BOMOrderLine) (*BOMOrderPlan, error) {
+	if len(items) == 0 {
+		return nil, errorsBadRequest("at least one product is required")
 	}
-	bom, err := s.bom.DefaultByProduct(t, productID)
-	if err != nil {
-		return nil, err
+	// Aggregate material requirements across all products (shared materials sum).
+	matQty := map[uint]decimal.Decimal{}
+	for _, it := range items {
+		if it.Qty.LessThanOrEqual(decimal.Zero) {
+			return nil, errorsBadRequest("product qty must be positive")
+		}
+		bom, err := s.bom.DefaultByProduct(t, it.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		if bom == nil {
+			return nil, errorsBadRequest(fmt.Sprintf("product %d has no released BOM", it.ProductID))
+		}
+		for _, d := range bom.Details {
+			cur := matQty[d.ComponentID]
+			matQty[d.ComponentID] = cur.Add(d.QtyPerUnit.Mul(it.Qty))
+		}
 	}
-	if bom == nil {
-		return nil, errorsBadRequest("product has no released BOM")
+	if len(matQty) == 0 {
+		return nil, errorsBadRequest("selected BOMs have no components")
 	}
+	// Deterministic iteration order over materials.
+	matIDs := make([]uint, 0, len(matQty))
+	for id := range matQty {
+		matIDs = append(matIDs, id)
+	}
+	sort.Slice(matIDs, func(i, j int) bool { return matIDs[i] < matIDs[j] })
+
 	plan := &BOMOrderPlan{Groups: []BOMOrderGroup{}, Warnings: []string{}}
 	groups := map[uint]*BOMOrderGroup{}
 	var order []uint
-	for _, d := range bom.Details {
-		name := fmt.Sprint(d.ComponentID)
-		if mat, _ := s.materials.Get(t, d.ComponentID); mat != nil {
+	for _, matID := range matIDs {
+		qty := matQty[matID]
+		name := fmt.Sprint(matID)
+		if mat, _ := s.materials.Get(t, matID); mat != nil {
 			name = mat.Name
 		}
-		rel, err := s.pickSupplier(t, d.ComponentID)
+		rel, err := s.pickSupplier(t, matID)
 		if err != nil {
 			return nil, err
 		}
@@ -143,9 +172,9 @@ func (s *BOMOrderService) resolve(t, productID uint, qty decimal.Decimal) (*BOMO
 			order = append(order, rel.SupplierID)
 		}
 		g.Items = append(g.Items, BOMOrderItem{
-			MaterialID:   d.ComponentID,
+			MaterialID:   matID,
 			MaterialName: name,
-			Qty:          d.QtyPerUnit.Mul(qty),
+			Qty:          qty,
 			UnitPrice:    rel.UnitPrice,
 		})
 	}

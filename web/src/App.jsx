@@ -10,7 +10,6 @@ import CustomerPage from './pages/CustomerPage.jsx'
 import WarehousePage from './pages/WarehousePage.jsx'
 import LocationPage from './pages/LocationPage.jsx'
 import PurchaseOrderPage from './pages/PurchaseOrderPage.jsx'
-import BOMOrderPage from './pages/BOMOrderPage.jsx'
 import SalesOrderPage from './pages/SalesOrderPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import TenantsPage from './pages/TenantsPage.jsx'
@@ -58,7 +57,6 @@ export default function App() {
           <Route path="warehouses" element={<WarehousePage />} />
           <Route path="locations" element={<LocationPage />} />
           <Route path="purchase-orders" element={<PurchaseOrderPage />} />
-          <Route path="bom-order" element={<BOMOrderPage />} />
           <Route path="sales-orders" element={<SalesOrderPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="boms" element={<BOMPage />} />

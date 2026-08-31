@@ -17,9 +17,22 @@ func NewBOMOrderHandler(s *service.BOMOrderService) *BOMOrderHandler {
 }
 
 type bomOrderRequest struct {
+	Items     []bomOrderItemReq `json:"items"`
+	OrderDate string            `json:"order_date"`
+}
+
+type bomOrderItemReq struct {
 	ProductID uint   `json:"product_id"`
 	Qty       string `json:"qty"`
-	OrderDate string `json:"order_date"`
+}
+
+func (h *BOMOrderHandler) toLines(req *bomOrderRequest) []service.BOMOrderLine {
+	lines := make([]service.BOMOrderLine, 0, len(req.Items))
+	for _, it := range req.Items {
+		q, _ := decimal.NewFromString(it.Qty)
+		lines = append(lines, service.BOMOrderLine{ProductID: it.ProductID, Qty: q})
+	}
+	return lines
 }
 
 func (h *BOMOrderHandler) Preview(c *gin.Context) {
@@ -28,8 +41,7 @@ func (h *BOMOrderHandler) Preview(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	q, _ := decimal.NewFromString(req.Qty)
-	plan, err := h.svc.Preview(tenantOf(c), req.ProductID, q)
+	plan, err := h.svc.Preview(tenantOf(c), h.toLines(&req))
 	if mapErr(c, err) {
 		return
 	}
@@ -42,9 +54,8 @@ func (h *BOMOrderHandler) Confirm(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	q, _ := decimal.NewFromString(req.Qty)
-	var od = parseTime(req.OrderDate)
-	orders, err := h.svc.Create(tenantOf(c), req.ProductID, q, od)
+	od := parseTime(req.OrderDate)
+	orders, err := h.svc.Create(tenantOf(c), h.toLines(&req), od)
 	if mapErr(c, err) {
 		return
 	}

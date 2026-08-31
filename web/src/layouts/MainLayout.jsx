@@ -25,7 +25,6 @@ const items = [
   { key: '/warehouses', icon: <ContainerOutlined />, label: '仓库', group: '基础数据', perm: 'warehouse:view' },
   { key: '/locations', icon: <BranchesOutlined />, label: '库位', group: '基础数据', perm: 'warehouse:view' },
   { key: '/purchase-orders', icon: <ShoppingCartOutlined />, label: '采购订单', group: '采购', perm: 'po:view' },
-  { key: '/bom-order', icon: <ExperimentOutlined />, label: '基于BOM下单', group: '采购', perm: 'po:create' },
   { key: '/sales-orders', icon: <ShopOutlined />, label: '销售订单', group: '销售', perm: 'so:view' },
   { key: '/stock', icon: <InboxOutlined />, label: '实时库存', group: '仓储', perm: 'stock:view' },
   { key: '/inventory', icon: <ContainerOutlined />, label: '出入库', group: '仓储', perm: 'inv:move' },

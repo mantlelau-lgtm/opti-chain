@@ -6,6 +6,7 @@ import {
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { poApi, supplierApi, materialApi, locationApi, warehouseApi } from '../api/index.js'
+import BOMOrderModal from '../components/BOMOrderModal.jsx'
 
 // PO statuses mirror the backend constants (model/procurement.go).
 const PO_STATUS = [
@@ -38,6 +39,7 @@ export default function PurchaseOrderPage() {
   const [locations, setLocations] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [form] = Form.useForm()
+  const [bomOrderOpen, setBomOrderOpen] = useState(false)
 
   // ---- receiving (receive goods against a PO, with QC rejection) ----
   const [receiving, setReceiving] = useState(null)
@@ -269,7 +271,10 @@ export default function PurchaseOrderPage() {
           style={{ width: 240 }}
           onSearch={(v) => { setKeyword(v); setPage(1) }}
          />
-         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建采购订单</Button>
+         <Space>
+           <Button icon={<PlusOutlined />} onClick={() => setBomOrderOpen(true)}>基于BOM下单</Button>
+           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建采购订单</Button>
+         </Space>
        </Space>
 
        <Table
@@ -514,6 +519,12 @@ export default function PurchaseOrderPage() {
           }}
          />
        </Modal>
+
+       <BOMOrderModal
+        open={bomOrderOpen}
+        onClose={() => setBomOrderOpen(false)}
+        onCreated={() => { setBomOrderOpen(false); load() }}
+       />
      </div>
    )
 }
