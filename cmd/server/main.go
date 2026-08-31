@@ -53,6 +53,9 @@ func main() {
 	if err := service.SeedRBAC(db.DB); err != nil {
 		log.Fatalf("seed rbac: %v", err)
 	}
+	if err := service.MigrateRoles(db.DB); err != nil {
+		log.Fatalf("migrate roles: %v", err)
+	}
 	if err := service.EnsureRNDCatalog(db.DB); err != nil {
 		log.Fatalf("seed rnd catalog: %v", err)
 	}

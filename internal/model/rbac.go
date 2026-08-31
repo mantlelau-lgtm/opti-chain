@@ -1,13 +1,14 @@
 package model
 
-// Fixed role codes (v0.2 decision: six roles, seeded, not user-configurable).
+// Fixed role codes (seven roles, seeded, not user-configurable).
 const (
-	RoleAdmin         = "admin"
-	RoleCategoryMgr   = "category_manager"
-	RoleProcAssistant = "procurement_assistant"
-	RoleCommittee     = "committee"
-	RoleQCWH          = "qc_wh"
-	RoleFinance       = "finance"
+	RoleAdmin    = "admin"                  // 管理员
+	RoleProcSpec = "procurement_specialist" // 采购专员
+	RoleProcMgr  = "procurement_manager"    // 采购经理
+	RolePlanSpec = "planning_specialist"    // 计划专员
+	RolePlanSup  = "planning_supervisor"    // 计划主管
+	RoleQC       = "qc"                     // 质检员/品控
+	RoleWhMgr    = "warehouse_manager"      // 仓库管理员
 )
 
 // Module corresponds to sys_module: a first-class menu/domain grouping so the

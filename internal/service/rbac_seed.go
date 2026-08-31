@@ -28,12 +28,13 @@ func SeedRBAC(db *gorm.DB) error {
 	}
 
 	roles := []model.Role{
-		{Code: model.RoleAdmin, Name: "管理员", Remark: "全部权限 + 用户管理"},
-		{Code: model.RoleCategoryMgr, Name: "品类经理", Remark: "主数据/审批决策"},
-		{Code: model.RoleProcAssistant, Name: "采购助理", Remark: "寻源/下单执行"},
-		{Code: model.RoleCommittee, Name: "采购决策委员会", Remark: "定标/准入批准"},
-		{Code: model.RoleQCWH, Name: "仓库/质检", Remark: "收货/库存作业"},
-		{Code: model.RoleFinance, Name: "财务", Remark: "信用/对账监督"},
+		{Code: model.RoleAdmin, Name: "管理员", Remark: "全部权限"},
+		{Code: model.RoleProcSpec, Name: "采购专员", Remark: "寻源/下单执行"},
+		{Code: model.RoleProcMgr, Name: "采购经理", Remark: "采购审批/供应商准入"},
+		{Code: model.RolePlanSpec, Name: "计划专员", Remark: "需求/计划维护"},
+		{Code: model.RolePlanSup, Name: "计划主管", Remark: "计划审批/MRP/BOM发布"},
+		{Code: model.RoleQC, Name: "质检员/品控", Remark: "收货质检"},
+		{Code: model.RoleWhMgr, Name: "仓库管理员", Remark: "仓储作业/库存管理"},
 	}
 	if err := db.Create(&roles).Error; err != nil {
 		return err
@@ -92,24 +93,35 @@ func SeedRBAC(db *gorm.DB) error {
 
 	matrix := map[string][]string{
 		model.RoleAdmin: allCodes,
-		model.RoleCategoryMgr: {
-			"material:view", "material:manage", "supplier:view", "supplier:audit",
-			"customer:view", "customer:manage", "warehouse:view",
-			"po:view", "po:approve", "so:view", "so:approve",
-			"stock:view", "inv:logs:view",
-			"demand:view", "demand:manage", "mrp:view", "mrp:compute", "mrp:convert",
-		},
-		model.RoleProcAssistant: {
-			"material:view", "supplier:view", "warehouse:view",
+		model.RoleProcSpec: {
+			"material:view", "supplier:view", "customer:view", "warehouse:view",
 			"po:view", "po:create", "po:edit",
-			"demand:view", "demand:manage", "mrp:view",
+			"demand:view", "mrp:view", "stock:view", "inv:logs:view",
 		},
-		model.RoleCommittee: {"po:view", "po:approve", "supplier:view", "supplier:audit", "so:view"},
-		model.RoleQCWH: {
-			"po:view", "po:receive", "warehouse:view",
-			"stock:view", "inv:move", "inv:logs:view",
+		model.RoleProcMgr: {
+			"material:view", "material:manage", "supplier:view", "supplier:manage", "supplier:audit",
+			"customer:view", "warehouse:view",
+			"po:view", "po:create", "po:edit", "po:approve", "po:delete",
+			"demand:view", "demand:manage", "mrp:view", "stock:view", "inv:logs:view",
 		},
-		model.RoleFinance: {"so:view", "so:approve", "customer:view", "po:view", "stock:view", "inv:logs:view"},
+		model.RolePlanSpec: {
+			"material:view", "supplier:view", "warehouse:view",
+			"po:view", "demand:view", "demand:manage", "mrp:view", "mrp:compute",
+			"stock:view",
+		},
+		model.RolePlanSup: {
+			"material:view", "material:manage", "supplier:view", "warehouse:view",
+			"po:view", "demand:view", "demand:manage", "mrp:view", "mrp:compute", "mrp:convert",
+			"stock:view", "inv:logs:view",
+		},
+		model.RoleQC: {
+			"material:view", "warehouse:view",
+			"po:view", "po:receive", "stock:view", "inv:move", "inv:logs:view",
+		},
+		model.RoleWhMgr: {
+			"material:view", "warehouse:view", "warehouse:manage",
+			"po:view", "po:receive", "stock:view", "inv:move", "inv:logs:view", "inv:order:delete",
+		},
 	}
 	roleID := map[string]uint{}
 	for _, r := range roles {
@@ -191,12 +203,13 @@ func EnsureRNDCatalog(db *gorm.DB) error {
 
 	// role -> permission matrix additions (RACI-aligned).
 	matrix := map[string][]string{
-		model.RoleAdmin:         {"bom:view", "bom:edit", "bom:release"},
-		model.RoleCategoryMgr:   {"bom:view", "bom:edit", "bom:release"},
-		model.RoleProcAssistant: {"bom:view", "bom:edit"},
-		model.RoleCommittee:     {"bom:view", "bom:release"},
-		model.RoleQCWH:          {"bom:view"},
-		model.RoleFinance:       {"bom:view"},
+		model.RoleAdmin:    {"bom:view", "bom:edit", "bom:release"},
+		model.RoleProcMgr:  {"bom:view"},
+		model.RoleProcSpec: {"bom:view"},
+		model.RolePlanSpec: {"bom:view", "bom:edit"},
+		model.RolePlanSup:  {"bom:view", "bom:edit", "bom:release"},
+		model.RoleQC:       {"bom:view"},
+		model.RoleWhMgr:    {"bom:view"},
 	}
 	var roles []model.Role
 	if err := db.Find(&roles).Error; err != nil {
@@ -216,6 +229,143 @@ func EnsureRNDCatalog(db *gorm.DB) error {
 					return err
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// MigrateRoles replaces the legacy six-role set with the current seven-role
+// design on an EXISTING database: wipes roles/matrix/assignments, re-seeds the
+// new roles and matrix, and remaps users from old roles to the closest new
+// role. Idempotent: skips when no legacy roles remain.
+func MigrateRoles(db *gorm.DB) error {
+	legacy := []string{"category_manager", "procurement_assistant", "committee", "qc_wh", "finance"}
+	var n int64
+	db.Model(&model.Role{}).Where("code IN ?", legacy).Count(&n)
+	if n == 0 {
+		return nil // nothing to migrate (fresh or already migrated)
+	}
+
+	// capture current assignments for remapping.
+	var urs []model.UserRole
+	if err := db.Find(&urs).Error; err != nil {
+		return err
+	}
+	var oldRoles []model.Role
+	if err := db.Find(&oldRoles).Error; err != nil {
+		return err
+	}
+	oldCode := map[uint]string{}
+	for _, r := range oldRoles {
+		oldCode[r.ID] = r.Code
+	}
+
+	// wipe roles, matrix and assignments.
+	if err := db.Exec("DELETE FROM sys_user_role").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("DELETE FROM sys_role_permission").Error; err != nil {
+		return err
+	}
+	if err := db.Exec("DELETE FROM sys_role").Error; err != nil {
+		return err
+	}
+
+	// re-seed the new role catalog + matrix (base permissions; bom perms are
+	// added by EnsureRNDCatalog).
+	roles := []model.Role{
+		{Code: model.RoleAdmin, Name: "管理员", Remark: "全部权限"},
+		{Code: model.RoleProcSpec, Name: "采购专员", Remark: "寻源/下单执行"},
+		{Code: model.RoleProcMgr, Name: "采购经理", Remark: "采购审批/供应商准入"},
+		{Code: model.RolePlanSpec, Name: "计划专员", Remark: "需求/计划维护"},
+		{Code: model.RolePlanSup, Name: "计划主管", Remark: "计划审批/MRP/BOM发布"},
+		{Code: model.RoleQC, Name: "质检员/品控", Remark: "收货质检"},
+		{Code: model.RoleWhMgr, Name: "仓库管理员", Remark: "仓储作业/库存管理"},
+	}
+	if err := db.Create(&roles).Error; err != nil {
+		return err
+	}
+	roleID := map[string]uint{}
+	for _, r := range roles {
+		roleID[r.Code] = r.ID
+	}
+	var perms []model.Permission
+	if err := db.Find(&perms).Error; err != nil {
+		return err
+	}
+	permID := map[string]uint{}
+	for _, p := range perms {
+		permID[p.Code] = p.ID
+	}
+	matrix := map[string][]string{
+		model.RoleAdmin: {},
+		model.RoleProcSpec: {
+			"material:view", "supplier:view", "customer:view", "warehouse:view",
+			"po:view", "po:create", "po:edit", "demand:view", "mrp:view", "stock:view", "inv:logs:view",
+		},
+		model.RoleProcMgr: {
+			"material:view", "material:manage", "supplier:view", "supplier:manage", "supplier:audit",
+			"customer:view", "warehouse:view", "po:view", "po:create", "po:edit", "po:approve", "po:delete",
+			"demand:view", "demand:manage", "mrp:view", "stock:view", "inv:logs:view",
+		},
+		model.RolePlanSpec: {
+			"material:view", "supplier:view", "warehouse:view",
+			"po:view", "demand:view", "demand:manage", "mrp:view", "mrp:compute", "stock:view",
+		},
+		model.RolePlanSup: {
+			"material:view", "material:manage", "supplier:view", "warehouse:view",
+			"po:view", "demand:view", "demand:manage", "mrp:view", "mrp:compute", "mrp:convert",
+			"stock:view", "inv:logs:view",
+		},
+		model.RoleQC: {
+			"material:view", "warehouse:view",
+			"po:view", "po:receive", "stock:view", "inv:move", "inv:logs:view",
+		},
+		model.RoleWhMgr: {
+			"material:view", "warehouse:view", "warehouse:manage",
+			"po:view", "po:receive", "stock:view", "inv:move", "inv:logs:view", "inv:order:delete",
+		},
+	}
+	// admin gets every currently-known permission.
+	for c := range permID {
+		matrix[model.RoleAdmin] = append(matrix[model.RoleAdmin], c)
+	}
+	for rc, codes := range matrix {
+		for _, pc := range codes {
+			if pid, ok := permID[pc]; ok && pid != 0 {
+				if err := db.Create(&model.RolePermission{RoleID: roleID[rc], PermissionID: pid}).Error; err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// remap users: old role -> closest new role (finance has no successor).
+	mapping := map[string]string{
+		"admin":                model.RoleAdmin,
+		"category_manager":     model.RoleProcMgr,
+		"procurement_assistant": model.RoleProcSpec,
+		"committee":            model.RoleProcMgr,
+		"qc_wh":                model.RoleQC,
+	}
+	seen := map[[2]uint]bool{}
+	for _, ur := range urs {
+		oc := oldCode[ur.RoleID]
+		nc, ok := mapping[oc]
+		if !ok {
+			continue
+		}
+		rid := roleID[nc]
+		if rid == 0 {
+			continue
+		}
+		key := [2]uint{ur.UserID, rid}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if err := db.Create(&model.UserRole{UserID: ur.UserID, RoleID: rid}).Error; err != nil {
+			return err
 		}
 	}
 	return nil
