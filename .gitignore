@@ -25,3 +25,6 @@ scm.db
 .DS_Store
 .idea/
 .vscode/
+
+# local reverse proxy config (machine-specific)
+Caddyfile
