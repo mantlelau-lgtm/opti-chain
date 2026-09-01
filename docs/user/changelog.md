@@ -1,5 +1,25 @@
 # 版本变更记录
 
+## [0.7.0] - 2026-09-01
+
+### Added
+- 智能助手：工作台新增「智能助手」入口，后台接入本地 LLM 网关（`SCM_LLM_URL`/`SCM_LLM_MODEL`）做语义分析
+- 按角色建 agent：7 个角色各对应一个助手（系统提示 + 角色工具集），根据用户问题路由唤醒对应 agent
+- 工具内部鉴权：agent 调用工具时携带用户身份，每个工具按用户实际权限（`HasPerm`）鉴权，越权操作被拒绝
+- 支持操作：物料查询/创建/更新、供应商/产品/BOM/采购单/库存查询、采购下单、BOM 创建
+
+## [0.6.0] - 2026-09-01
+
+### Added
+- AK/SK 机制：sys_api_key 表（绑定租户 + 用户）+ 个人自助签发（填名称即签发，SK 仅显示一次、AES-GCM 密文落库）
+- 密钥权限随个人角色自动授予（非手动选择），与个人信息绑定；签发入口并入「工作台 → 密钥签发」
+- 认证中间件兼容双身份：Bearer JWT（浏览器）+ `X-Api-Key`/`X-Timestamp`/`X-Signature`（agent），HMAC-SHA256 请求签名 + 300s 防重放
+- MCP server 二进制 `cmd/scm-mcp`（stdio，`github.com/mark3labs/mcp-go`），20 个工具覆盖下单 + 新建基础数据 + 查询，每个工具维护 description
+- 方案文档 `docs/reports/mcp-server.md`
+
+### Changed
+- 菜单「审批工作台」改名「审批列表」，与「密钥签发」合并为「工作台」分组
+
 ## [0.5.0] - 2026-09-01
 
 ### Added
