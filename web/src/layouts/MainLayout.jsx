@@ -6,6 +6,7 @@ import {
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
   FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
   SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined, AuditOutlined,
+  KeyOutlined,
 } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 import { authApi } from '../api/index.js'
@@ -17,7 +18,8 @@ const { Title } = Typography
 // what the actor holds (permission catalog lives in DB tables, surfaced via
 // /auth/me).
 const items = [
-  { key: '/approvals', icon: <AuditOutlined />, label: '工作台', group: '审批', perm: 'approval:view' },
+  { key: '/approvals', icon: <AuditOutlined />, label: '审批列表', group: '工作台', perm: 'approval:view' },
+  { key: '/api-keys', icon: <KeyOutlined />, label: '密钥签发', group: '工作台', perm: '' },
   { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
   { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
   { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
@@ -48,7 +50,9 @@ export default function MainLayout() {
     }).catch(() => {})
   }, [])
 
-  const visible = items.filter((it) => perms.includes(it.perm))
+  // Items without a perm requirement (e.g. personal key issuance) show for
+  // every authenticated user; the rest are gated by the actor's permissions.
+  const visible = items.filter((it) => !it.perm || perms.includes(it.perm))
   const groups = visible.reduce((acc, it) => {
     (acc[it.group] = acc[it.group] || []).push({ key: it.key, icon: it.icon, label: it.label })
     return acc
@@ -66,6 +70,7 @@ export default function MainLayout() {
            theme="dark"
            mode="inline"
            selectedKeys={[loc.pathname]}
+           defaultOpenKeys={['工作台']}
            items={Object.entries(groups).map(([g, children]) => ({
              key: g,
              label: g,

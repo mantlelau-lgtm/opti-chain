@@ -18,6 +18,13 @@ export const userApi = {
   update: (id, d) => api.update(`/users/${id}`, d),
   remove: (id) => api.remove(`/users/${id}`),
 }
+export const apiKeyApi = {
+  list: (p) => api.list('/api-keys', p),
+  create: (d) => client.post('/api-keys', d),
+  disable: (id) => client.put(`/api-keys/${id}/disable`),
+  enable: (id) => client.put(`/api-keys/${id}/enable`),
+  remove: (id) => api.remove(`/api-keys/${id}`),
+}
 
 // Generic REST helpers used by every resource module. Each returns the
 // unwrapped payload, so pages never touch axios or the envelope directly.

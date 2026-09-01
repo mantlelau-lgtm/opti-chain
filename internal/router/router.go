@@ -25,6 +25,7 @@ type Handlers struct {
 	AuditLog  *handler.OperationLogHandler
 	Storage   *handler.StorageHandler
 	Approval  *handler.ApprovalHandler
+	ApiKey    *handler.ApiKeyHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -49,6 +50,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 		protected.GET("/operation-logs", h.AuditLog.List)
 		registerStorage(protected, h.Storage)
 		registerApproval(protected, h.Approval)
+		registerApiKey(protected, h.ApiKey)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)
@@ -128,6 +130,17 @@ func registerSupplierMaterial(g *gin.RouterGroup, h *handler.SupplierMaterialHan
 func registerBOMOrder(g *gin.RouterGroup, h *handler.BOMOrderHandler) {
 	g.POST("/bom-order/preview", h.Preview)
 	g.POST("/bom-order/confirm", h.Confirm)
+}
+
+func registerApiKey(g *gin.RouterGroup, h *handler.ApiKeyHandler) {
+	k := g.Group("/api-keys")
+	{
+		k.GET("", h.List)
+		k.POST("", h.Create)
+		k.PUT("/:id/disable", h.Disable)
+		k.PUT("/:id/enable", h.Enable)
+		k.DELETE("/:id", h.Delete)
+	}
 }
 
 func registerRBAC(g *gin.RouterGroup, h *handler.RBACHandler) {

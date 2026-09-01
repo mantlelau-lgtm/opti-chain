@@ -89,6 +89,7 @@ func allModels() []interface{} {
 		&model.ApprovalGroupMember{},
 		&model.ApprovalTask{},
 		&model.ApprovalTaskMember{},
+		&model.ApiKey{},
 	}
 }
 

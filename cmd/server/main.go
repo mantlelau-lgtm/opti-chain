@@ -53,6 +53,7 @@ func main() {
 	dataSourceRepo := repository.NewDataSourceRepo(gdb)
 	approvalGroupRepo := repository.NewApprovalGroupRepo(gdb)
 	approvalTaskRepo := repository.NewApprovalTaskRepo(gdb)
+	apiKeyRepo := repository.NewApiKeyRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
@@ -137,6 +138,7 @@ func main() {
 		Supplier: supplierRepo,
 		DB:       db.DB,
 	})
+	apiKeySvc := service.NewApiKeyService(apiKeyRepo, cfg.Auth.JWTSecret)
 
 	// 4) Handlers (HTTP translation).
 	h := &router.Handlers{
@@ -154,10 +156,11 @@ func main() {
 		AuditLog:  handler.NewOperationLogHandler(auditSvc),
 		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
 		Approval:  handler.NewApprovalHandler(approvalSvc),
+		ApiKey:    handler.NewApiKeyHandler(apiKeySvc, rbacSvc),
 	}
 
 	// 5) Router + start.
-	authMW := middleware.Auth(cfg.Auth.Enabled, authSvc.ParseToken)
+	authMW := middleware.AuthOrKey(cfg.Auth.Enabled, authSvc.ParseToken, apiKeySvc.Verify)
 	permMW := middleware.RequirePerm(cfg.Auth.Enabled, rbacSvc.Check)
 	auditMW := middleware.Audit(cfg.Auth.Enabled, auditSvc)
 	engine := router.New(cfg.Server.CORSOrigin, h, authMW, permMW, auditMW)

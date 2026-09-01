@@ -88,9 +88,22 @@ func (s *RBACService) RefreshCache() error {
 	return nil
 }
 
-// HasPerm reports whether any of the actor's roles grants the permission.
+// HasPerm reports whether the actor holds the permission. AK/SK actors carry
+// an explicit permission set on the key (empty = all); JWT actors resolve
+// through their roles.
 func (s *RBACService) HasPerm(a *authx.Actor, perm string) bool {
 	if a == nil {
+		return false
+	}
+	if a.KeyAuth {
+		if len(a.KeyPerms) == 0 {
+			return true // empty key permission set = all permissions
+		}
+		for _, p := range a.KeyPerms {
+			if p == perm {
+				return true
+			}
+		}
 		return false
 	}
 	for _, r := range a.Roles {

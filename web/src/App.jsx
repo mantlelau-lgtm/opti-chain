@@ -18,6 +18,7 @@ import OperationLogPage from './pages/OperationLogPage.jsx'
 import StoragePage from './pages/StoragePage.jsx'
 import ApprovalWorkbenchPage from './pages/ApprovalWorkbenchPage.jsx'
 import ApprovalGroupPage from './pages/ApprovalGroupPage.jsx'
+import ApiKeyPage from './pages/ApiKeyPage.jsx'
 import BOMPage from './pages/BOMPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
@@ -55,7 +56,7 @@ export default function App() {
 
         {/* 业务系统（租户） */}
         <Route element={<BusinessProtected />}>
-          <Route index element={<ApprovalWorkbenchPage />} />
+          <Route index element={<Navigate to="/approvals" replace />} />
           <Route path="materials" element={<MaterialPage />} />
           <Route path="suppliers" element={<SupplierPage />} />
           <Route path="supplier-material" element={<SupplierMaterialPage />} />
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="purchase-orders" element={<PurchaseOrderPage />} />
           <Route path="sales-orders" element={<SalesOrderPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="api-keys" element={<ApiKeyPage />} />
           <Route path="approvals" element={<ApprovalWorkbenchPage />} />
           <Route path="approval-groups" element={<ApprovalGroupPage />} />
           <Route path="operation-logs" element={<OperationLogPage />} />
