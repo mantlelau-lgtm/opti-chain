@@ -212,6 +212,15 @@ export default function PurchaseOrderPage() {
       } catch (e) { message.error(e.message || '查询收货记录失败') }
    }
 
+  // 提交审批：草稿采购单进入审批流，由审批组在工作台处理。
+  const submitApproval = async (record) => {
+     try {
+        await approvalApi.submit({ order_type: 'PO', order_id: record.id })
+        message.success('已提交审批，等待审批组处理')
+        load()
+      } catch (e) { message.error(e.message || '提交审批失败') }
+   }
+
   const supplierOpts = suppliers.map((s) => ({ label: s.name, value: s.id }))
   const materialOpts = materials.map((m) => ({ label: `${m.sku_code} ${m.name}`, value: m.id }))
   const locationOpts = locations.map((l) => ({ label: l.location_code, value: l.id }))
@@ -238,20 +247,21 @@ export default function PurchaseOrderPage() {
        render: (v) => <Tag color={statusColor(v)}>{statusLabel(v)}</Tag>,
      },
      {
-       title: '操作', key: 'action', fixed: 'right', width: 330,
+       title: '操作', key: 'action', fixed: 'right', width: 300,
        render: (_, record) => (
           <Space>
-            <Select
-             size="small"
-             style={{ width: 110 }}
-             value={record.status}
-             options={PO_STATUS}
-             onChange={(s) => changeStatus(record, s)}
-            />
+            {(record.status === 'DRAFT') && (
+              <Button type="link" size="small" onClick={() => submitApproval(record)}>提交审批</Button>
+            )}
             {(record.status === 'APPROVED' || record.status === 'IN_PROGRESS') && (
               <Button type="link" size="small" onClick={() => openReceive(record)}>收货</Button>
             )}
             <Button type="link" size="small" onClick={() => openReceipts(record)}>收货记录</Button>
+            {(record.status === 'DRAFT' || record.status === 'APPROVED') && (
+              <Popconfirm title="确认取消该采购单？" onConfirm={() => changeStatus(record, 'CANCELLED')}>
+                <Button type="link" danger size="small">取消</Button>
+              </Popconfirm>
+            )}
             <Button type="link" size="small" onClick={() => openEdit(record)}>编辑</Button>
             <Popconfirm title="确认删除？" onConfirm={() => remove(record.id)}>
               <Button type="link" danger size="small">删除</Button>

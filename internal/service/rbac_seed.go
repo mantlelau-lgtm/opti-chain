@@ -275,6 +275,63 @@ func EnsureAuditCatalog(db *gorm.DB) error {
 	return nil
 }
 
+// EnsureApprovalCatalog idempotently adds the approval permissions:
+// approval:view (workbench) to all roles, approval:manage (group management)
+// to admin + the manager/supervisor roles.
+func EnsureApprovalCatalog(db *gorm.DB) error {
+	var mod model.Module
+	if err := db.Where("code = ?", "system").First(&mod).Error; err != nil {
+		return err
+	}
+	defs := []struct{ code, name string }{
+		{"approval:view", "审批工作台查看"},
+		{"approval:manage", "审批组管理"},
+	}
+	permID := map[string]uint{}
+	for _, d := range defs {
+		var p model.Permission
+		if err := db.Where("code = ?", d.code).First(&p).Error; err == nil {
+			permID[d.code] = p.ID
+			continue
+		}
+		np := model.Permission{Code: d.code, Name: d.name, ModuleID: mod.ID}
+		if err := db.Create(&np).Error; err != nil {
+			return err
+		}
+		permID[d.code] = np.ID
+	}
+	var roles []model.Role
+	if err := db.Find(&roles).Error; err != nil {
+		return err
+	}
+	roleID := map[string]uint{}
+	for _, r := range roles {
+		roleID[r.Code] = r.ID
+	}
+	grant := map[string][]string{
+		model.RoleAdmin:    {"approval:view", "approval:manage"},
+		model.RoleProcSpec: {"approval:view"},
+		model.RoleProcMgr:  {"approval:view", "approval:manage"},
+		model.RolePlanSpec: {"approval:view"},
+		model.RolePlanSup:  {"approval:view", "approval:manage"},
+		model.RoleQC:       {"approval:view"},
+		model.RoleWhMgr:    {"approval:view"},
+	}
+	for rc, codes := range grant {
+		for _, pc := range codes {
+			var cnt int64
+			db.Model(&model.RolePermission{}).
+				Where("role_id = ? AND permission_id = ?", roleID[rc], permID[pc]).Count(&cnt)
+			if cnt == 0 && roleID[rc] != 0 {
+				if err := db.Create(&model.RolePermission{RoleID: roleID[rc], PermissionID: permID[pc]}).Error; err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // MigrateRoles replaces the legacy six-role set with the current seven-role
 // design on an EXISTING database: wipes roles/matrix/assignments, re-seeds the
 // new roles and matrix, and remaps users from old roles to the closest new

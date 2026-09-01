@@ -51,6 +51,8 @@ func main() {
 	supplierMaterialRepo := repository.NewSupplierMaterialRepo(gdb)
 	operationLogRepo := repository.NewOperationLogRepo(gdb)
 	dataSourceRepo := repository.NewDataSourceRepo(gdb)
+	approvalGroupRepo := repository.NewApprovalGroupRepo(gdb)
+	approvalTaskRepo := repository.NewApprovalTaskRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
@@ -64,6 +66,9 @@ func main() {
 	}
 	if err := service.EnsureAuditCatalog(db.DB); err != nil {
 		log.Fatalf("seed audit catalog: %v", err)
+	}
+	if err := service.EnsureApprovalCatalog(db.DB); err != nil {
+		log.Fatalf("seed approval catalog: %v", err)
 	}
 	rbacSvc := service.NewRBACService(service.RBACDeps{
 		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
@@ -108,6 +113,14 @@ func main() {
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
 	auditSvc := service.NewAuditService(operationLogRepo, tenantRepo)
 	storageSvc := service.NewStorageService(db.DB, dataSourceRepo, cfg.DB.Driver, cfg.DB.DSN)
+	approvalSvc := service.NewApprovalService(service.ApprovalDeps{
+		Groups: approvalGroupRepo,
+		Tasks:  approvalTaskRepo,
+		Users:  userRepo,
+		POSvc:  poSvc,
+		SOSvc:  soSvc,
+		DB:     db.DB,
+	})
 	bomOrderSvc := service.NewBOMOrderService(service.BOMOrderDeps{
 		BOM:       bomRepo,
 		SupMat:    supplierMaterialRepo,
@@ -140,6 +153,7 @@ func main() {
 		BOMOrder:  handler.NewBOMOrderHandler(bomOrderSvc),
 		AuditLog:  handler.NewOperationLogHandler(auditSvc),
 		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
+		Approval:  handler.NewApprovalHandler(approvalSvc),
 	}
 
 	// 5) Router + start.

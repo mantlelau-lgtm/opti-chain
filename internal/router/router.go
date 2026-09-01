@@ -24,6 +24,7 @@ type Handlers struct {
 	BOMOrder  *handler.BOMOrderHandler
 	AuditLog  *handler.OperationLogHandler
 	Storage   *handler.StorageHandler
+	Approval  *handler.ApprovalHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -47,6 +48,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		protected.GET("/operation-logs", h.AuditLog.List)
 		registerStorage(protected, h.Storage)
+		registerApproval(protected, h.Approval)
 		registerBase(protected, h.Base)
 		registerProcurement(protected, h.PO, h.Receiving)
 		registerSales(protected, h.Sales)
@@ -78,6 +80,25 @@ func registerRND(g *gin.RouterGroup, h *handler.RNDHandler) {
 		b.PUT("/:id", h.BOMUpdate)
 		b.PUT("/:id/release", h.BOMRelease)
 		b.DELETE("/:id", h.BOMDelete)
+	}
+}
+
+func registerApproval(g *gin.RouterGroup, h *handler.ApprovalHandler) {
+	grp := g.Group("/approval-groups")
+	{
+		grp.GET("", h.GroupList)
+		grp.POST("", h.GroupCreate)
+		grp.PUT("/:id", h.GroupUpdate)
+		grp.DELETE("/:id", h.GroupDelete)
+	}
+	ap := g.Group("/approvals")
+	{
+		ap.POST("", h.Submit)
+		ap.GET("/pending", h.Pending)
+		ap.GET("/processed", h.Processed)
+		ap.GET("/submitted", h.Submitted)
+		ap.GET("/:id", h.Get)
+		ap.POST("/:id/action", h.Act)
 	}
 }
 

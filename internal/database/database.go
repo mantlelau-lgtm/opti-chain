@@ -85,6 +85,10 @@ func allModels() []interface{} {
 		&model.UserRole{},
 		&model.RolePermission{},
 		&model.DataSource{},
+		&model.ApprovalGroup{},
+		&model.ApprovalGroupMember{},
+		&model.ApprovalTask{},
+		&model.ApprovalTaskMember{},
 	}
 }
 

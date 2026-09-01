@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { soApi, customerApi, materialApi } from '../api/index.js'
+import { soApi, customerApi, materialApi, approvalApi } from '../api/index.js'
 
 // SO statuses mirror the backend constants (model/sales.go).
 const SO_STATUS = [
@@ -101,6 +101,15 @@ export default function SalesOrderPage() {
       } catch (e) { message.error(e.message || '审批失败') }
    }
 
+  // 提交审批：草稿销售单进入审批流，由审批组在工作台处理。
+  const submitApproval = async (record) => {
+     try {
+        await approvalApi.submit({ order_type: 'SO', order_id: record.id })
+        message.success('已提交审批，等待审批组处理')
+        load()
+      } catch (e) { message.error(e.message || '提交审批失败') }
+   }
+
   const cancel = async (record) => {
      try {
         await soApi.cancel(record.id)
@@ -137,9 +146,7 @@ export default function SalesOrderPage() {
        render: (_, record) => (
           <Space>
             {record.status === 'DRAFT' && (
-              <Popconfirm title="审批将锁定可用库存并占用信用额度，确认？" onConfirm={() => approve(record)}>
-                <Button type="link" size="small">审批</Button>
-              </Popconfirm>
+              <Button type="link" size="small" onClick={() => submitApproval(record)}>提交审批</Button>
             )}
             {(record.status === 'DRAFT' || record.status === 'APPROVED') && (
               <Popconfirm title="确认取消？" onConfirm={() => cancel(record)}>

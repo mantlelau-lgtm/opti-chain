@@ -5,7 +5,7 @@ import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
   FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
-  SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined,
+  SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined, AuditOutlined,
 } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 import { authApi } from '../api/index.js'
@@ -17,6 +17,7 @@ const { Title } = Typography
 // what the actor holds (permission catalog lives in DB tables, surfaced via
 // /auth/me).
 const items = [
+  { key: '/approvals', icon: <AuditOutlined />, label: '审批工作台', group: '审批', perm: 'approval:view' },
   { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
   { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
   { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
@@ -30,6 +31,7 @@ const items = [
   { key: '/inventory', icon: <ContainerOutlined />, label: '出入库', group: '仓储', perm: 'inv:move' },
   { key: '/planning', icon: <FundOutlined />, label: '计划/MRP', group: '计划', perm: 'demand:view' },
   { key: '/users', icon: <SettingOutlined />, label: '用户管理', group: '系统', perm: 'user:manage' },
+  { key: '/approval-groups', icon: <SettingOutlined />, label: '审批组管理', group: '系统', perm: 'approval:manage' },
   { key: '/operation-logs', icon: <FileSearchOutlined />, label: '操作日志', group: '系统', perm: 'audit:view' },
 ]
 

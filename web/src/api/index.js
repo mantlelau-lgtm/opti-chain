@@ -113,6 +113,20 @@ export const storageApi = {
   status: () => client.get('/storage/migrate/status'),
 }
 
+// ---- Approval ----
+export const approvalApi = {
+  groups: (p) => api.list('/approval-groups', p),
+  createGroup: (d) => api.create('/approval-groups', d),
+  updateGroup: (id, d) => api.update(`/approval-groups/${id}`, d),
+  removeGroup: (id) => api.remove(`/approval-groups/${id}`),
+  submit: (d) => client.post('/approvals', d),
+  pending: () => client.get('/approvals/pending'),
+  processed: () => client.get('/approvals/processed'),
+  submitted: () => client.get('/approvals/submitted'),
+  get: (id) => client.get(`/approvals/${id}`),
+  act: (id, d) => client.post(`/approvals/${id}/action`, d),
+}
+
 // ---- R&D / BOM ----
 export const productApi = {
   list: (p) => api.list('/products', p),
