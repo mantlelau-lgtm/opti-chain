@@ -55,7 +55,7 @@ export default function App() {
 
         {/* 业务系统（租户） */}
         <Route element={<BusinessProtected />}>
-          <Route index element={<MaterialPage />} />
+          <Route index element={<ApprovalWorkbenchPage />} />
           <Route path="materials" element={<MaterialPage />} />
           <Route path="suppliers" element={<SupplierPage />} />
           <Route path="supplier-material" element={<SupplierMaterialPage />} />

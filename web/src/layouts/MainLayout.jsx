@@ -17,7 +17,7 @@ const { Title } = Typography
 // what the actor holds (permission catalog lives in DB tables, surfaced via
 // /auth/me).
 const items = [
-  { key: '/approvals', icon: <AuditOutlined />, label: '审批工作台', group: '审批', perm: 'approval:view' },
+  { key: '/approvals', icon: <AuditOutlined />, label: '工作台', group: '审批', perm: 'approval:view' },
   { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
   { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
   { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
