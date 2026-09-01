@@ -11,6 +11,7 @@ import (
 	"scm/internal/database"
 	"scm/internal/handler"
 	"scm/internal/middleware"
+	"scm/internal/pkg/llmclient"
 	"scm/internal/repository"
 	"scm/internal/router"
 	"scm/internal/service"
@@ -139,6 +140,18 @@ func main() {
 		DB:       db.DB,
 	})
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo, cfg.Auth.JWTSecret)
+	assistantSvc := service.NewAssistantService(
+		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
+		service.AssistantDeps{
+			Materials: materialSvc,
+			Suppliers: supplierSvc,
+			Products:  productSvc,
+			BOMs:      bomSvc,
+			POs:       poSvc,
+			Stock:     stockSvc,
+			RBAC:      rbacSvc,
+		},
+	)
 
 	// 4) Handlers (HTTP translation).
 	h := &router.Handlers{
@@ -157,6 +170,7 @@ func main() {
 		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
 		Approval:  handler.NewApprovalHandler(approvalSvc),
 		ApiKey:    handler.NewApiKeyHandler(apiKeySvc, rbacSvc),
+		Assistant: handler.NewAssistantHandler(assistantSvc),
 	}
 
 	// 5) Router + start.

@@ -25,6 +25,9 @@ export const apiKeyApi = {
   enable: (id) => client.put(`/api-keys/${id}/enable`),
   remove: (id) => api.remove(`/api-keys/${id}`),
 }
+export const assistantApi = {
+  chat: (message) => client.post('/assistant/chat', { message }),
+}
 
 // Generic REST helpers used by every resource module. Each returns the
 // unwrapped payload, so pages never touch axios or the envelope directly.

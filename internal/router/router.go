@@ -26,6 +26,7 @@ type Handlers struct {
 	Storage   *handler.StorageHandler
 	Approval  *handler.ApprovalHandler
 	ApiKey    *handler.ApiKeyHandler
+	Assistant *handler.AssistantHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -48,6 +49,7 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 		protected.GET("/rbac/catalog", h.RBAC.Catalog)
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		protected.GET("/operation-logs", h.AuditLog.List)
+		protected.POST("/assistant/chat", h.Assistant.Chat)
 		registerStorage(protected, h.Storage)
 		registerApproval(protected, h.Approval)
 		registerApiKey(protected, h.ApiKey)

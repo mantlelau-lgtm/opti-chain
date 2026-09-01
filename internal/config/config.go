@@ -29,11 +29,20 @@ type Auth struct {
 	TokenTTL  time.Duration // access-token lifetime
 }
 
+// LLM configures the local LLM gateway (OpenAI-compatible) that powers the
+// in-app assistant's semantic analysis.
+type LLM struct {
+	URL   string // base URL, e.g. http://127.0.0.1:8080
+	Model string // model id as known to the gateway
+	Key   string // optional bearer key for the gateway
+}
+
 // Config is the top-level application configuration.
 type Config struct {
 	DB     Database
 	Server Server
 	Auth   Auth
+	LLM    LLM
 }
 
 // Load reads configuration from environment variables, with sane defaults
@@ -65,6 +74,11 @@ func Load() *Config {
 			Enabled:   getEnv("SCM_AUTH", "on") != "off",
 			JWTSecret: getEnv("SCM_JWT_SECRET", "scm-dev-secret-change-me"),
 			TokenTTL:  ttl,
+		},
+		LLM: LLM{
+			URL:   getEnv("SCM_LLM_URL", "http://127.0.0.1:8080"),
+			Model: getEnv("SCM_LLM_MODEL", "qwen3-coder-flash"),
+			Key:   getEnv("SCM_LLM_KEY", ""),
 		},
 	}
 }

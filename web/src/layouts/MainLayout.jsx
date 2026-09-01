@@ -6,7 +6,7 @@ import {
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
   FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
   SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined, AuditOutlined,
-  KeyOutlined,
+  KeyOutlined, RobotOutlined,
 } from '@ant-design/icons'
 import { auth } from '../api/client.js'
 import { authApi } from '../api/index.js'
@@ -19,6 +19,7 @@ const { Title } = Typography
 // /auth/me).
 const items = [
   { key: '/approvals', icon: <AuditOutlined />, label: '审批列表', group: '工作台', perm: 'approval:view' },
+  { key: '/assistant', icon: <RobotOutlined />, label: '智能助手', group: '工作台', perm: '' },
   { key: '/api-keys', icon: <KeyOutlined />, label: '密钥签发', group: '工作台', perm: '' },
   { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
   { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },

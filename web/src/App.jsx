@@ -19,6 +19,7 @@ import StoragePage from './pages/StoragePage.jsx'
 import ApprovalWorkbenchPage from './pages/ApprovalWorkbenchPage.jsx'
 import ApprovalGroupPage from './pages/ApprovalGroupPage.jsx'
 import ApiKeyPage from './pages/ApiKeyPage.jsx'
+import AssistantPage from './pages/AssistantPage.jsx'
 import BOMPage from './pages/BOMPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="sales-orders" element={<SalesOrderPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="api-keys" element={<ApiKeyPage />} />
+          <Route path="assistant" element={<AssistantPage />} />
           <Route path="approvals" element={<ApprovalWorkbenchPage />} />
           <Route path="approval-groups" element={<ApprovalGroupPage />} />
           <Route path="operation-logs" element={<OperationLogPage />} />
