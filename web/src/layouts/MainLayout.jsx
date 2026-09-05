@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Layout, Menu, Typography, Button, Space } from 'antd'
+import { Layout, Menu, Typography, Button, Space, Modal, Form, Input, message, Dropdown } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
@@ -42,6 +42,8 @@ export default function MainLayout() {
   const nav = useNavigate()
   const loc = useLocation()
   const [perms, setPerms] = useState(auth.perms())
+  const [pwdOpen, setPwdOpen] = useState(false)
+  const [pwdForm] = Form.useForm()
 
   // Refresh the permission codes so menu gating stays in sync with the DB.
   useEffect(() => {
@@ -50,6 +52,22 @@ export default function MainLayout() {
       setPerms(me.perms || [])
     }).catch(() => {})
   }, [])
+
+  const handleChangePassword = async () => {
+    try {
+      const values = await pwdForm.validateFields()
+      if (values.new_password !== values.confirm_password) {
+        message.error('两次输入的新密码不一致')
+        return
+      }
+      await authApi.changePassword({ old_password: values.old_password, new_password: values.new_password })
+      message.success('密码修改成功')
+      setPwdOpen(false)
+    } catch (e) {
+      if (e.errorFields) return
+      message.error(e.message || '修改失败')
+    }
+  }
 
   // Items without a perm requirement (e.g. personal key issuance) show for
   // every authenticated user; the rest are gated by the actor's permissions.
@@ -83,20 +101,41 @@ export default function MainLayout() {
        <Layout>
          <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
            <Title level={4} style={{ margin: 0 }}>轻量级供应链管理系统</Title>
-           <Space>
-             <span style={{ color: '#666' }}>{user?.tenant ? `${user.tenant} · ` : ''}{user?.name || user?.username || ''}</span>
-             <Button
-              type="link"
-              icon={<LogoutOutlined />}
-              onClick={() => { auth.clear(); nav('/login') }}
-             >
-              退出
-             </Button>
-           </Space>
+           <Dropdown
+             menu={{
+               items: [
+                 { key: 'pwd', label: '修改密码', onClick: () => { pwdForm.resetFields(); setPwdOpen(true) } },
+                 { key: 'logout', label: '退出登录', danger: true,
+                   onClick: () => {
+                     Modal.confirm({ title: '确认退出登录？', onOk: () => { auth.clear(); nav('/login') } })
+                   },
+                 },
+               ],
+             }}
+             trigger={['hover']}
+           >
+             <span style={{ color: '#1677ff', cursor: 'pointer' }}>
+               {user?.tenant ? `${user.tenant} · ` : ''}{user?.name || user?.username || ''}
+             </span>
+           </Dropdown>
          </Header>
          <Content style={{ margin: 16 }}>
            <Outlet />
          </Content>
+
+         <Modal title="修改密码" open={pwdOpen} onOk={handleChangePassword} onCancel={() => setPwdOpen(false)} destroyOnClose>
+           <Form form={pwdForm} layout="vertical">
+             <Form.Item name="old_password" label="旧密码" rules={[{ required: true, message: '请输入旧密码' }]}>
+               <Input.Password />
+             </Form.Item>
+             <Form.Item name="new_password" label="新密码" rules={[{ required: true, min: 6, message: '至少 6 位' }]}>
+               <Input.Password />
+             </Form.Item>
+             <Form.Item name="confirm_password" label="确认新密码" rules={[{ required: true, message: '请再次输入新密码' }]}>
+               <Input.Password />
+             </Form.Item>
+           </Form>
+         </Modal>
        </Layout>
      </Layout>
   )

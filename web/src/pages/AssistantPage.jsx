@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { Input, Button, Typography, Tag, Space, Spin } from 'antd'
-import { SendOutlined, RobotOutlined, UserOutlined } from '@ant-design/icons'
+import { Input, Button, Typography, Tag, Space, Spin, Popconfirm, message } from 'antd'
+import { SendOutlined, RobotOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons'
 import { assistantApi } from '../api/index.js'
 
 const { Text, Paragraph } = Typography
@@ -13,6 +13,18 @@ export default function AssistantPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef(null)
+
+  useEffect(() => {
+    assistantApi.getHistory().then((res) => {
+      if (res.history?.length) {
+        setMessages(res.history.map((h) => ({
+          role: h.role,
+          content: h.content,
+          toolCalls: h.tool_calls ? h.tool_calls.split(',') : [],
+        })))
+      }
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -37,6 +49,14 @@ export default function AssistantPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const clearMemory = async () => {
+    try {
+      await assistantApi.clearMemory()
+      setMessages([])
+      message.success('记忆已清除')
+    } catch (e) { message.error('清除失败') }
   }
 
   return (
@@ -85,6 +105,9 @@ export default function AssistantPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, padding: '12px 0', borderTop: '1px solid #eee' }}>
+        <Popconfirm title="确认清除所有对话记忆？" onConfirm={clearMemory}>
+          <Button icon={<DeleteOutlined />} size="small" disabled={loading}>清除记忆</Button>
+        </Popconfirm>
         <Input.TextArea
           value={input}
           onChange={(e) => setInput(e.target.value)}

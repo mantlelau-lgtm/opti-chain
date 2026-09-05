@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/repository"
+	"scm/pkg/authx"
+	"scm/internal/repo"
 )
 
 // AuditService writes operation-log records for successful mutations. The

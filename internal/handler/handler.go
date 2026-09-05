@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/query"
-	"scm/internal/pkg/response"
+	"scm/pkg/authx"
+	"scm/pkg/query"
+	"scm/pkg/response"
 	"scm/internal/service"
 )
 

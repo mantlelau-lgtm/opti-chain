@@ -2,10 +2,12 @@ package database
 
 import (
 	"fmt"
-	"log"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+var log = zap.NewExample()
 
 // legacyUniqueColumns maps table -> column whose single-column UNIQUE index
 // predates multi-tenancy. After AutoMigrate adds tenant_id, uniqueness must
@@ -38,7 +40,7 @@ func MigrateTenantIndexes(db *gorm.DB, driver string) {
 			if err := db.Exec(fmt.Sprintf(
 				"CREATE UNIQUE INDEX IF NOT EXISTS %q ON %q(tenant_id, %s)",
 				composite, table, col)).Error; err != nil {
-				log.Printf("migrate index %s: %v", composite, err)
+				log.Warn("migrate index", zap.String("idx", composite), zap.Error(err))
 			}
 			continue
 		}

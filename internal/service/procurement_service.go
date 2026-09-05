@@ -6,7 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // PurchaseOrderService owns purchase-order lifecycle logic. Every method

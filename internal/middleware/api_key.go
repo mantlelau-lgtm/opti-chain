@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/aksk"
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/response"
+	"scm/pkg/aksk"
+	"scm/pkg/authx"
+	"scm/pkg/response"
 )
 
 // AuthOrKey is the authentication boundary for the protected API group. It

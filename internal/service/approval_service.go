@@ -6,8 +6,8 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/repository"
+	"scm/pkg/authx"
+	"scm/internal/repo"
 )
 
 // ApprovalService owns the approval workflow: groups, submitting orders for

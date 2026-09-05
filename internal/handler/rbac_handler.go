@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/response"
+	"scm/pkg/authx"
+	"scm/pkg/response"
 	"scm/internal/service"
 )
 
@@ -55,6 +55,22 @@ func (h *RBACHandler) Me(c *gin.Context) {
 		"roles": a.Roles,
 		"perms": h.svc.PermsForActor(a),
 	})
+}
+
+func (h *RBACHandler) ChangePassword(c *gin.Context) {
+	a := authx.GetActor(c)
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ErrBadRequest, err.Error())
+		return
+	}
+	if mapErr(c, h.auth.ChangePassword(a, req.OldPassword, req.NewPassword)) {
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
 }
 
 func (h *RBACHandler) Catalog(c *gin.Context) {

@@ -137,12 +137,12 @@ export default function PlanningPage() {
          }
      }
 
-  const removeMrp = async (id) => {
+  const discardMrp = async (id) => {
      try {
         await planningApi.removeMrp(id)
-        message.success('已删除')
+        message.success('已废弃')
         loadMrp()
-         } catch (e) { message.error(e.message || '删除失败') }
+         } catch (e) { message.error(e.message || '废弃失败') }
      }
 
   const demandCols = [
@@ -183,13 +183,17 @@ export default function PlanningPage() {
        render: (v) => v ? dayjs(v).format('YYYY-MM-DD') : '-' },
       {
        title: '状态', dataIndex: 'status',
-       render: (v) => <Tag color={v === 'CONVERTED' ? 'success' : 'processing'}>{v}</Tag>,
+       render: (v) => {
+        if (v === 'CONVERTED') return <Tag color="success">已转单</Tag>
+        if (v === 'OBSOLETE') return <Tag color="default">已废弃</Tag>
+        return <Tag color="processing">待处理</Tag>
+      },
        },
       {
        title: '操作', key: 'action', fixed: 'right', width: 100,
        render: (_, record) => (
-           <Popconfirm title="确认删除？" onConfirm={() => removeMrp(record.id)}>
-            <Button type="link" danger size="small">删除</Button>
+           <Popconfirm title="确认废弃？" onConfirm={() => discardMrp(record.id)}>
+            <Button type="link" danger size="small">废弃</Button>
            </Popconfirm>
         ),
        },

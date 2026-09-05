@@ -4,6 +4,7 @@ import client, { pageRes } from './client'
 export const authApi = {
   login: (d) => client.post('/auth/login', d),
   me: () => client.get('/auth/me'),
+  changePassword: (data) => client.put('/auth/password', data),
   catalog: () => client.get('/rbac/catalog'),
   setRolePermissions: (id, permCodes) => client.put(`/rbac/roles/${id}/permissions`, { perm_codes: permCodes }),
 }
@@ -27,6 +28,8 @@ export const apiKeyApi = {
 }
 export const assistantApi = {
   chat: (message) => client.post('/assistant/chat', { message }),
+  getHistory: () => client.get('/assistant/memory'),
+  clearMemory: () => client.delete('/assistant/memory'),
 }
 
 // Generic REST helpers used by every resource module. Each returns the

@@ -1,13 +1,15 @@
 package service
 
 import (
-	"log"
+	"go.uber.org/zap"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
 )
+
+var log = zap.NewExample()
 func SeedRBAC(db *gorm.DB) error {
 	var count int64
 	if err := db.Model(&model.Tenant{}).Count(&count).Error; err != nil {
@@ -161,7 +163,7 @@ func SeedRBAC(db *gorm.DB) error {
 		"plan_demand", "plan_mrp_result", "sale_order",
 	} {
 		if err := db.Exec("UPDATE "+t+" SET tenant_id = ? WHERE tenant_id = 0", demo.ID).Error; err != nil {
-			log.Printf("seed: adopt %s: %v", t, err)
+			log.Warn("seed adopt", zap.String("tenant", t), zap.Error(err))
 		}
 	}
 	return nil

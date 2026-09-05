@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"scm/internal/memory"
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/llmclient"
+	"scm/pkg/authx"
+	"scm/pkg/llmclient"
 )
 
 // assistantMaxIters caps the function-calling loop so a confused model cannot
@@ -17,6 +18,8 @@ const assistantMaxIters = 6
 
 // AssistantDeps holds the service collaborators the assistant tools call.
 type AssistantDeps struct {
+	Audit     *AuditService
+	Memory    *memory.Service
 	Materials *MaterialService
 	Suppliers *SupplierService
 	Products  *ProductService

@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/repository"
+	"scm/pkg/authx"
+	"scm/internal/repo"
 )
 
 // RBACService owns tenants, users, the permission catalog and enforcement.

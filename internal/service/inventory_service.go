@@ -5,7 +5,7 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // InventoryService owns inventory-movement business logic. It coordinates the

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"scm/internal/pkg/aksk"
+	"scm/pkg/aksk"
 )
 
 // Client is a signed HTTP client for the SCM backend. Every request carries

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/authx"
+	"scm/pkg/authx"
 	"scm/internal/service"
 )
 

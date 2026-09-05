@@ -8,8 +8,8 @@ import (
 	"github.com/shopspring/decimal"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/query"
+	"scm/pkg/authx"
+	"scm/pkg/query"
 )
 
 // ---- argument coercion helpers ----

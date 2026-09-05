@@ -4,7 +4,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // SupplierMaterialService owns the supplier↔material supply relationships and

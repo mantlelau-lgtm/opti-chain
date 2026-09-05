@@ -46,13 +46,13 @@ func (ApprovalGroupMember) TableName() string { return "sys_approval_group_membe
 // for a submitted order.
 type ApprovalTask struct {
 	TenantBaseModel
-	OrderType    string                `gorm:"column:order_type;size:16;not null;index" json:"order_type"`
-	OrderID      uint                  `gorm:"column:order_id;not null;index" json:"order_id"`
-	OrderNumber  string                `gorm:"column:order_number;size:64" json:"order_number"`
-	Status       string                `gorm:"column:status;size:16;not null;default:PENDING" json:"status"`
-	SubmitterID  uint                  `gorm:"column:submitter_id" json:"submitter_id"`
+	OrderType     string               `gorm:"column:order_type;size:16;not null;index" json:"order_type"`
+	OrderID       uint                 `gorm:"column:order_id;not null;index" json:"order_id"`
+	OrderNumber   string               `gorm:"column:order_number;size:64" json:"order_number"`
+	Status        string               `gorm:"column:status;size:16;not null;default:PENDING" json:"status"`
+	SubmitterID   uint                 `gorm:"column:submitter_id" json:"submitter_id"`
 	SubmitterName string               `gorm:"column:submitter_name;size:64" json:"submitter_name"`
-	Members      []ApprovalTaskMember  `gorm:"foreignKey:TaskID" json:"members,omitempty"`
+	Members       []ApprovalTaskMember `gorm:"foreignKey:TaskID" json:"members,omitempty"`
 }
 
 func (ApprovalTask) TableName() string { return "sys_approval_task" }

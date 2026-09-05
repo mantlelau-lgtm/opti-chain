@@ -90,6 +90,10 @@ func allModels() []interface{} {
 		&model.ApprovalTask{},
 		&model.ApprovalTaskMember{},
 		&model.ApiKey{},
+		&model.AssistantMemory{},
+		&model.MemoryNode{},
+		&model.MemoryEdge{},
+		&model.MemoryProfile{},
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"scm/internal/model"
-	"scm/internal/pkg/response"
+	"scm/pkg/response"
 	"scm/internal/service"
 )
 

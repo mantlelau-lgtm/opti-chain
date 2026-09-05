@@ -5,25 +5,30 @@
 package main
 
 import (
-	"log"
+	"go.uber.org/zap"
 
 	"scm/internal/config"
 	"scm/internal/database"
 	"scm/internal/handler"
+	"scm/internal/memory"
 	"scm/internal/middleware"
-	"scm/internal/pkg/llmclient"
-	"scm/internal/repository"
+	"scm/pkg/llmclient"
+	"scm/internal/repo"
 	"scm/internal/router"
 	"scm/internal/service"
 )
 
 func main() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+	zap.ReplaceGlobals(logger)
+
 	cfg := config.Load()
 
 	// 1) Database + schema migration (dialect-agnostic via GORM).
 	db, err := database.Open(cfg.DB.Driver, cfg.DB.DSN)
 	if err != nil {
-		log.Fatalf("db open: %v", err)
+		zap.L().Fatal("db open", zap.Error(err))
 	}
 
 	// 2) Repositories (data access).
@@ -55,29 +60,33 @@ func main() {
 	approvalGroupRepo := repository.NewApprovalGroupRepo(gdb)
 	approvalTaskRepo := repository.NewApprovalTaskRepo(gdb)
 	apiKeyRepo := repository.NewApiKeyRepo(gdb)
+	memRepo := repository.NewAssistantMemoryRepo(gdb)
+	memNodeRepo := repository.NewMemoryNodeRepo(gdb)
+	memEdgeRepo := repository.NewMemoryEdgeRepo(gdb)
+	memProfRepo := repository.NewMemoryProfileRepo(gdb)
 
 	// 3) Services (business logic).
 	if err := service.SeedRBAC(db.DB); err != nil {
-		log.Fatalf("seed rbac: %v", err)
+		zap.L().Fatal("seed rbac", zap.Error(err))
 	}
 	if err := service.MigrateRoles(db.DB); err != nil {
-		log.Fatalf("migrate roles: %v", err)
+		zap.L().Fatal("migrate roles", zap.Error(err))
 	}
 	if err := service.EnsureRNDCatalog(db.DB); err != nil {
-		log.Fatalf("seed rnd catalog: %v", err)
+		zap.L().Fatal("seed rnd catalog", zap.Error(err))
 	}
 	if err := service.EnsureAuditCatalog(db.DB); err != nil {
-		log.Fatalf("seed audit catalog: %v", err)
+		zap.L().Fatal("seed audit catalog", zap.Error(err))
 	}
 	if err := service.EnsureApprovalCatalog(db.DB); err != nil {
-		log.Fatalf("seed approval catalog: %v", err)
+		zap.L().Fatal("seed approval catalog", zap.Error(err))
 	}
 	rbacSvc := service.NewRBACService(service.RBACDeps{
 		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
 		Modules: moduleRepo, Perms: permRepo, UserRoles: userRoleRepo, DB: db.DB,
 	})
 	if err := rbacSvc.RefreshCache(); err != nil {
-		log.Fatalf("refresh permission cache: %v", err)
+		zap.L().Fatal("refresh permission cache", zap.Error(err))
 	}
 	authSvc := service.NewAuthService(userRepo, tenantRepo, userRoleRepo, cfg.Auth.JWTSecret, cfg.Auth.TokenTTL)
 	materialSvc := service.NewMaterialService(materialRepo)
@@ -140,6 +149,9 @@ func main() {
 		DB:       db.DB,
 	})
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo, cfg.Auth.JWTSecret)
+	memorySvc := memory.NewService(memRepo, memNodeRepo, memEdgeRepo, memProfRepo,
+		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
+		memory.Config{WindowSize: 10, ConsolidateInterval: 5})
 	assistantSvc := service.NewAssistantService(
 		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
 		service.AssistantDeps{
@@ -150,6 +162,8 @@ func main() {
 			POs:       poSvc,
 			Stock:     stockSvc,
 			RBAC:      rbacSvc,
+			Audit:     auditSvc,
+			Memory:    memorySvc,
 		},
 	)
 
@@ -170,7 +184,7 @@ func main() {
 		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
 		Approval:  handler.NewApprovalHandler(approvalSvc),
 		ApiKey:    handler.NewApiKeyHandler(apiKeySvc, rbacSvc),
-		Assistant: handler.NewAssistantHandler(assistantSvc),
+		Assistant: handler.NewAssistantHandler(assistantSvc, memorySvc),
 	}
 
 	// 5) Router + start.
@@ -179,13 +193,17 @@ func main() {
 	auditMW := middleware.Audit(cfg.Auth.Enabled, auditSvc)
 	engine := router.New(cfg.Server.CORSOrigin, h, authMW, permMW, auditMW)
 	if !cfg.Auth.Enabled {
-		log.Printf("WARNING: SCM_AUTH=off — authentication disabled (dev only)")
+		zap.L().Warn("SCM_AUTH=off — authentication disabled (dev only)")
 	}
 	if cfg.Auth.JWTSecret == "scm-dev-secret-change-me" {
-		log.Printf("WARNING: default JWT secret in use — set SCM_JWT_SECRET in production")
+		zap.L().Warn("default JWT secret in use — set SCM_JWT_SECRET in production")
 	}
-	log.Printf("SCM server listening on %s (driver=%s, auth=%v)", cfg.Server.Addr, cfg.DB.Driver, cfg.Auth.Enabled)
+	zap.L().Info("SCM server listening",
+		zap.String("addr", cfg.Server.Addr),
+		zap.String("driver", cfg.DB.Driver),
+		zap.Bool("auth", cfg.Auth.Enabled),
+	)
 	if err := engine.Run(cfg.Server.Addr); err != nil {
-		log.Fatalf("server run: %v", err)
+		zap.L().Fatal("server run", zap.Error(err))
 	}
 }

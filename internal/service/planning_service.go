@@ -7,8 +7,8 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/pkg/query"
-	"scm/internal/repository"
+	"scm/pkg/query"
+	"scm/internal/repo"
 )
 
 // PlanningService orchestrates demand handling and MRP computation.

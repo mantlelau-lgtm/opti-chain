@@ -2,7 +2,7 @@ package service
 
 import (
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // Every method takes the tenant id first (threaded from the authenticated

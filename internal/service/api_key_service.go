@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"scm/internal/model"
-	"scm/internal/pkg/aksk"
-	"scm/internal/pkg/authx"
-	"scm/internal/repository"
+	"scm/pkg/aksk"
+	"scm/pkg/authx"
+	"scm/internal/repo"
 )
 
 const (

@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // BOMOrderService turns a product's BOM into purchase orders: it expands the

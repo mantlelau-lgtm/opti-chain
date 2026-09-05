@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/pkg/query"
+	"scm/pkg/query"
 )
 
 // ListFilter is a common filter passed to list operations. Tenant scopes the

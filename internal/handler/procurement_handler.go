@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"scm/internal/pkg/response"
+	"scm/pkg/response"
 	"scm/internal/service"
 )
 

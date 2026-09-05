@@ -22,6 +22,7 @@ const (
 const (
 	MrpStatusPending   = "PENDING"
 	MrpStatusConverted = "CONVERTED"
+	MrpStatusObsolete  = "OBSOLETE"
 )
 
 // Demand corresponds to plan_demand.

@@ -5,7 +5,7 @@ package service
 
 import (
 	"errors"
-	"scm/internal/pkg/query"
+	"scm/pkg/query"
 )
 
 // ErrNoChange is returned by guarded updates when nothing was affected.

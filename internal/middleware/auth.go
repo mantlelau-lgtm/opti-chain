@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/response"
+	"scm/pkg/authx"
+	"scm/pkg/response"
 )
 
 // Auth enforces a valid bearer token on protected routes. The parsed Actor is

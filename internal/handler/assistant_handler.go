@@ -3,20 +3,22 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/authx"
-	"scm/internal/pkg/response"
+	"scm/internal/memory"
 	"scm/internal/service"
+	"scm/pkg/authx"
+	"scm/pkg/response"
 )
 
 // AssistantHandler exposes the in-app intelligent assistant. The chat endpoint
 // is available to any authenticated user; the assistant service routes the
 // question to the role-appropriate agent and enforces permissions per tool.
 type AssistantHandler struct {
-	svc *service.AssistantService
+	svc    *service.AssistantService
+	memory *memory.Service
 }
 
-func NewAssistantHandler(s *service.AssistantService) *AssistantHandler {
-	return &AssistantHandler{svc: s}
+func NewAssistantHandler(s *service.AssistantService, m *memory.Service) *AssistantHandler {
+	return &AssistantHandler{svc: s, memory: m}
 }
 
 func (h *AssistantHandler) Chat(c *gin.Context) {
@@ -33,4 +35,30 @@ func (h *AssistantHandler) Chat(c *gin.Context) {
 		return
 	}
 	response.OK(c, reply)
+}
+
+func (h *AssistantHandler) ClearMemory(c *gin.Context) {
+	actor := authx.GetActor(c)
+	if actor == nil || actor.UserID == 0 {
+		response.HTTPFail(c, 401, response.ErrUnauthorized, "login required")
+		return
+	}
+	if h.memory != nil {
+		_ = h.memory.Clear(c.Request.Context(), actor)
+	}
+	response.OK(c, gin.H{"ok": true})
+}
+
+func (h *AssistantHandler) GetHistory(c *gin.Context) {
+	actor := authx.GetActor(c)
+	if actor == nil || actor.UserID == 0 {
+		response.HTTPFail(c, 401, response.ErrUnauthorized, "login required")
+		return
+	}
+	if h.memory == nil {
+		response.OK(c, gin.H{"history": []any{}})
+		return
+	}
+	result := h.memory.Retrieve(c.Request.Context(), actor)
+	response.OK(c, gin.H{"history": result.ShortTerm})
 }

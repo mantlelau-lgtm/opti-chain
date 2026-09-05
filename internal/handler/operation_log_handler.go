@@ -3,8 +3,8 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/response"
-	"scm/internal/repository"
+	"scm/pkg/response"
+	"scm/internal/repo"
 	"scm/internal/service"
 )
 

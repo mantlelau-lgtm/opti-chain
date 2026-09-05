@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // ---- Customer ----

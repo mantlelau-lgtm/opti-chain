@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"scm/internal/pkg/response"
+	"scm/pkg/response"
 	"scm/internal/service"
 )
 

@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/pkg/aksk"
-	"scm/internal/repository"
+	"scm/pkg/aksk"
+	"scm/internal/repo"
 )
 
 func newTestApiKeyService(t *testing.T) *ApiKeyService {

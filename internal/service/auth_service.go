@@ -8,8 +8,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"scm/internal/model"
-	"scm/internal/pkg/authx"
-	"scm/internal/repository"
+	"scm/pkg/authx"
+	"scm/internal/repo"
 )
 
 // tokenVersion guards against stale tokens issued before multi-tenancy:
@@ -68,6 +68,32 @@ func (s *AuthService) Login(username, password, tenantCode string) (string, *mod
 		return "", nil, nil, err
 	}
 	return token, u, roles, nil
+}
+
+// ChangePassword verifies the old password and replaces it with newPassword.
+func (s *AuthService) ChangePassword(actor *authx.Actor, oldPassword, newPassword string) error {
+	if actor == nil || actor.UserID == 0 {
+		return errf(ErrUnauthorized, "login required")
+	}
+	if len(newPassword) < 6 {
+		return errorsBadRequest("new password must be at least 6 characters")
+	}
+	u, err := s.users.Get(actor.TenantID, actor.UserID)
+	if err != nil {
+		return err
+	}
+	if u == nil {
+		return errf(ErrUnauthorized, "user not found")
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(oldPassword)) != nil {
+		return errf(ErrUnauthorized, "old password is incorrect")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u.PasswordHash = string(hash)
+	return s.users.Update(actor.TenantID, u)
 }
 
 // ParseToken validates a bearer token and extracts the actor.

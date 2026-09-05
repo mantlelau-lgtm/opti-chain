@@ -46,10 +46,13 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 	protected.Use(authMW, permMW, auditMW)
 	{
 		protected.GET("/auth/me", h.RBAC.Me)
+		protected.PUT("/auth/password", h.RBAC.ChangePassword)
 		protected.GET("/rbac/catalog", h.RBAC.Catalog)
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		protected.GET("/operation-logs", h.AuditLog.List)
 		protected.POST("/assistant/chat", h.Assistant.Chat)
+		protected.GET("/assistant/memory", h.Assistant.GetHistory)
+		protected.DELETE("/assistant/memory", h.Assistant.ClearMemory)
 		registerStorage(protected, h.Storage)
 		registerApproval(protected, h.Approval)
 		registerApiKey(protected, h.ApiKey)

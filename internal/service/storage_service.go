@@ -13,7 +13,7 @@ import (
 
 	"scm/internal/database"
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // tabler exposes a GORM model's table name.

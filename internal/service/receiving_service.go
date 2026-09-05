@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repository"
+	"scm/internal/repo"
 )
 
 // ReceivingService closes the purchase loop. One receiving round:

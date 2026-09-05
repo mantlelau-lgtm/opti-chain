@@ -13,18 +13,22 @@
 package main
 
 import (
-	"log"
 	"os"
 
+	"go.uber.org/zap"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+	zap.ReplaceGlobals(logger)
+
 	baseURL := getEnv("SCM_MCP_BASE_URL", "http://127.0.0.1:8088")
 	ak := os.Getenv("SCM_MCP_AK")
 	sk := os.Getenv("SCM_MCP_SK")
 	if ak == "" || sk == "" {
-		log.Fatal("SCM_MCP_AK and SCM_MCP_SK are required — issue a key in the SCM 系统 → API 密钥 page")
+		zap.L().Fatal("SCM_MCP_AK and SCM_MCP_SK are required — issue a key in the SCM 系统 → API 密钥 page")
 	}
 
 	client := NewClient(baseURL, ak, sk)
@@ -33,7 +37,7 @@ func main() {
 	registerTools(s, client)
 
 	if err := server.ServeStdio(s); err != nil {
-		log.Fatalf("stdio server: %v", err)
+		zap.L().Fatal("stdio server", zap.Error(err))
 	}
 }
 
