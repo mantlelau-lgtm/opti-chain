@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { poApi, supplierApi, materialApi, locationApi, warehouseApi } from '../api/index.js'
+import { poApi, supplierApi, materialApi, warehouseApi } from '../api/index.js'
 import BOMOrderModal from '../components/BOMOrderModal.jsx'
 
 // PO statuses mirror the backend constants (model/procurement.go).
@@ -36,7 +36,6 @@ export default function PurchaseOrderPage() {
   const [editing, setEditing] = useState(null)
   const [suppliers, setSuppliers] = useState([])
   const [materials, setMaterials] = useState([])
-  const [locations, setLocations] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [form] = Form.useForm()
   const [bomOrderOpen, setBomOrderOpen] = useState(false)
@@ -55,13 +54,11 @@ export default function PurchaseOrderPage() {
      Promise.all([
        supplierApi.list({ page: 1, size: 200 }),
        materialApi.list({ page: 1, size: 1000 }),
-       locationApi.list({ page: 1, size: 1000 }),
        warehouseApi.list({ page: 1, size: 200 }),
-       ]).then(([s, m, l, w]) => {
+       ]).then(([s, m, w]) => {
        if (!mounted) return
        setSuppliers(s.list || [])
        setMaterials(m.list || [])
-       setLocations(l.list || [])
        setWarehouses(w.list || [])
        }).catch(() => {})
      return () => { mounted = false }
@@ -82,7 +79,7 @@ export default function PurchaseOrderPage() {
      form.resetFields()
      form.setFieldsValue({
         order_date: dayjs(),
-        details: [{ material_id: undefined, order_qty: 1, unit_price: 0, location_id: undefined }],
+        details: [{ material_id: undefined, order_qty: 1, unit_price: 0 }],
       })
      setOpen(true)
    }
@@ -123,7 +120,6 @@ export default function PurchaseOrderPage() {
             material_id: d.material_id,
             order_qty: String(d.order_qty),
             unit_price: String(d.unit_price),
-            location_id: d.location_id || 0,
           })),
        }
        await poApi.create(payload)
@@ -223,7 +219,6 @@ export default function PurchaseOrderPage() {
 
   const supplierOpts = suppliers.map((s) => ({ label: s.name, value: s.id }))
   const materialOpts = materials.map((m) => ({ label: `${m.sku_code} ${m.name}`, value: m.id }))
-  const locationOpts = locations.map((l) => ({ label: l.location_code, value: l.id }))
   const warehouseOpts = warehouses.map((w) => ({ label: w.name, value: w.id }))
   const materialName = (id) => materials.find((m) => m.id === id)?.name || id
 
@@ -306,7 +301,6 @@ export default function PurchaseOrderPage() {
                 { title: '单价', dataIndex: 'unit_price' },
                 { title: '小计', dataIndex: 'total_price' },
                 { title: '已收货', dataIndex: 'received_qty' },
-                { title: '库位', dataIndex: 'location_id' },
              ]}
             />
           ),
@@ -366,17 +360,7 @@ export default function PurchaseOrderPage() {
                        <InputNumber min={0} step={0.0001} style={{ width: 120 }} placeholder="数量" />
                       </Form.Item>
                       <Form.Item name={[f.name, 'unit_price']} rules={[{ required: true, message: '单价' }]}>
-                       <InputNumber min={0} step={0.01} style={{ width: 120 }} placeholder="单价" />
-                      </Form.Item>
-                      <Form.Item name={[f.name, 'location_id']}>
-                       <Select
-                        style={{ width: 140 }}
-                        allowClear
-                        options={locationOpts}
-                        placeholder="库位"
-                        showSearch
-                        optionFilterProp="label"
-                       />
+                       <InputNumber min={0} step={0.01} style={{ width: 140 }} placeholder="单价" />
                       </Form.Item>
                       <Button
                        type="text"

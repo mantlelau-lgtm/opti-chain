@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -39,7 +40,7 @@ func NewSaleOrderRepo(db *gormDB) *SaleOrderRepo {
 }
 
 // GetWithDetails loads an SO with its details preloaded, scoped to a tenant.
-func (r *SaleOrderRepo) GetWithDetails(t, id uint) (*model.SaleOrder, error) {
+func (r *SaleOrderRepo) GetWithDetails(ctx context.Context, t, id uint) (*model.SaleOrder, error) {
 	var so model.SaleOrder
 	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&so, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -53,7 +54,7 @@ func (r *SaleOrderRepo) GetWithDetails(t, id uint) (*model.SaleOrder, error) {
 // CreateWithDetails inserts an SO and its details in one transaction. The
 // header is created with associations omitted so the explicit detail loop
 // stays the single writer.
-func (r *SaleOrderRepo) CreateWithDetails(t uint, so *model.SaleOrder) error {
+func (r *SaleOrderRepo) CreateWithDetails(ctx context.Context, t uint, so *model.SaleOrder) error {
 	so.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(so).Error; err != nil {

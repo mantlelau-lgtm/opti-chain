@@ -85,7 +85,7 @@ func (h *RBACHandler) Catalog(c *gin.Context) {
 
 // requirePlatform aborts with 403 unless the caller is the platform tenant.
 func (h *RBACHandler) requirePlatform(c *gin.Context) bool {
-	if h.svc.IsPlatform(tenantOf(c)) {
+	if h.svc.IsPlatform(c.Request.Context(), tenantOf(c)) {
 		return true
 	}
 	response.HTTPFail(c, 403, response.ErrForbidden, "platform only")
@@ -159,7 +159,7 @@ func (h *RBACHandler) RoleSetPermissions(c *gin.Context) {
 // ---- users (tenant scope) ----
 
 func (h *RBACHandler) UserList(c *gin.Context) {
-	list, total, err := h.svc.ListUsers(tenantOf(c), parsePage(c))
+	list, total, err := h.svc.ListUsers(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -172,7 +172,7 @@ func (h *RBACHandler) UserCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	u, err := h.svc.CreateUser(tenantOf(c), in)
+	u, err := h.svc.CreateUser(c.Request.Context(), tenantOf(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -185,7 +185,7 @@ func (h *RBACHandler) UserUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	u, err := h.svc.UpdateUser(tenantOf(c), idParam(c), in)
+	u, err := h.svc.UpdateUser(c.Request.Context(), tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -193,7 +193,7 @@ func (h *RBACHandler) UserUpdate(c *gin.Context) {
 }
 
 func (h *RBACHandler) UserDelete(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteUser(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.svc.DeleteUser(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

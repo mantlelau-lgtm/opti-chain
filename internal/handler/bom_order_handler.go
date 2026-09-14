@@ -41,7 +41,7 @@ func (h *BOMOrderHandler) Preview(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	plan, err := h.svc.Preview(tenantOf(c), h.toLines(&req))
+	plan, err := h.svc.Preview(c.Request.Context(), tenantOf(c), h.toLines(&req))
 	if mapErr(c, err) {
 		return
 	}
@@ -55,7 +55,7 @@ func (h *BOMOrderHandler) Confirm(c *gin.Context) {
 		return
 	}
 	od := parseTime(req.OrderDate)
-	orders, err := h.svc.Create(tenantOf(c), h.toLines(&req), od)
+	orders, err := h.svc.Create(c.Request.Context(), tenantOf(c), h.toLines(&req), od)
 	if mapErr(c, err) {
 		return
 	}

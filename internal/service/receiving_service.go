@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -68,8 +69,8 @@ type ReceiveDetailInput struct {
 }
 
 // Receive executes one receiving round and returns the persisted receipt.
-func (s *ReceivingService) Receive(t, poID uint, in ReceiveInput) (*model.PurchaseReceipt, error) {
-	po, err := s.pos.GetWithDetails(t, poID)
+func (s *ReceivingService) Receive(ctx context.Context, t, poID uint, in ReceiveInput) (*model.PurchaseReceipt, error) {
+	po, err := s.pos.GetWithDetails(context.Background(), t, poID)
 	if po == nil {
 		return nil, errNotFound(poID)
 	}
@@ -209,9 +210,9 @@ func (s *ReceivingService) Receive(t, poID uint, in ReceiveInput) (*model.Purcha
 }
 
 // ListReceipts returns all receiving rounds of a PO, newest first.
-func (s *ReceivingService) ListReceipts(t, poID uint) ([]model.PurchaseReceipt, error) {
+func (s *ReceivingService) ListReceipts(ctx context.Context, t, poID uint) ([]model.PurchaseReceipt, error) {
 	var out []model.PurchaseReceipt
-	if err := s.receipts.ListByPO(t, poID, &out); err != nil {
+	if err := s.receipts.ListByPO(context.Background(), t, poID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

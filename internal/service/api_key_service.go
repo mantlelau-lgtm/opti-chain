@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -38,7 +39,7 @@ func NewApiKeyService(repo *repository.ApiKeyRepo, secret string) *ApiKeyService
 // CreateKey issues a new AK/SK bound to a specific user. permissions is a
 // comma-joined permission-code list derived from the user's roles (empty = all
 // permissions); expiresAt may be nil.
-func (s *ApiKeyService) CreateKey(t, userID uint, name, permissions string, expiresAt *time.Time) (*model.ApiKey, string, error) {
+func (s *ApiKeyService) CreateKey(ctx context.Context, t, userID uint, name, permissions string, expiresAt *time.Time) (*model.ApiKey, string, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, "", errorsBadRequest("name is required")
 	}
@@ -153,20 +154,20 @@ func keyActor(key *model.ApiKey) *authx.Actor {
 
 // ---- lifecycle ----
 
-func (s *ApiKeyService) List(t, userID uint, in PageInput) ([]model.ApiKey, int64, error) {
+func (s *ApiKeyService) List(ctx context.Context, t, userID uint, in PageInput) ([]model.ApiKey, int64, error) {
 	var (
 		out   []model.ApiKey
 		total int64
 	)
 	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
-	if err := s.repo.List(t, userID, f, &out, &total); err != nil {
+	if err := s.repo.List(ctx, t, userID, f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
 }
 
-func (s *ApiKeyService) Disable(t, userID, id uint) error {
-	k, err := s.repo.Get(t, userID, id)
+func (s *ApiKeyService) Disable(ctx context.Context, t, userID, id uint) error {
+	k, err := s.repo.Get(ctx, t, userID, id)
 	if err != nil {
 		return err
 	}
@@ -174,11 +175,11 @@ func (s *ApiKeyService) Disable(t, userID, id uint) error {
 		return errNotFound(id)
 	}
 	k.Status = 0
-	return s.repo.Update(t, k)
+	return s.repo.Update(ctx, t, k)
 }
 
-func (s *ApiKeyService) Enable(t, userID, id uint) error {
-	k, err := s.repo.Get(t, userID, id)
+func (s *ApiKeyService) Enable(ctx context.Context, t, userID, id uint) error {
+	k, err := s.repo.Get(ctx, t, userID, id)
 	if err != nil {
 		return err
 	}
@@ -186,11 +187,11 @@ func (s *ApiKeyService) Enable(t, userID, id uint) error {
 		return errNotFound(id)
 	}
 	k.Status = 1
-	return s.repo.Update(t, k)
+	return s.repo.Update(ctx, t, k)
 }
 
-func (s *ApiKeyService) Delete(t, userID, id uint) error {
-	return s.repo.Delete(t, userID, id)
+func (s *ApiKeyService) Delete(ctx context.Context, t, userID, id uint) error {
+	return s.repo.Delete(ctx, t, userID, id)
 }
 
 // ---- SK at-rest encryption ----

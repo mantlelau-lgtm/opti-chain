@@ -4,7 +4,7 @@ import {
   Tag, Select, InputNumber, Popconfirm, Radio, Checkbox,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
-import { inventoryApi, warehouseApi, materialApi, locationApi, poApi } from '../api/index.js'
+import { inventoryApi, warehouseApi, materialApi, poApi } from '../api/index.js'
 
 const ORDER_TYPES = [
     { label: '采购入库', value: 'PURCHASE_IN' },
@@ -30,7 +30,6 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(false)
   const [warehouses, setWarehouses] = useState([])
   const [materials, setMaterials] = useState([])
-  const [locations, setLocations] = useState([])
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveDir, setMoveDir] = useState('in')
   const [form] = Form.useForm()
@@ -46,12 +45,10 @@ export default function InventoryPage() {
      Promise.all([
        warehouseApi.list({ page: 1, size: 200 }),
        materialApi.list({ page: 1, size: 1000 }),
-       locationApi.list({ page: 1, size: 1000 }),
-        ]).then(([w, m, l]) => {
+        ]).then(([w, m]) => {
        if (!mounted) return
        setWarehouses(w.list || [])
        setMaterials(m.list || [])
-       setLocations(l.list || [])
         }).catch(() => {})
      return () => { mounted = false }
       }, [])
@@ -75,7 +72,6 @@ export default function InventoryPage() {
 
   const whOpts = warehouses.map((w) => ({ label: w.name, value: w.id }))
   const matOpts = materials.map((m) => ({ label: `${m.sku_code} ${m.name}`, value: m.id }))
-  const locOpts = locations.map((l) => ({ label: l.location_code, value: l.id }))
   const poOpts = poList.map((p) => ({ label: `${p.po_number}（${p.supplier_id ? '' : ''}${p.status}）`, value: p.id }))
 
   const openMove = (dir) => {
@@ -87,7 +83,7 @@ export default function InventoryPage() {
      form.setFieldsValue({
         order_number: '',
         warehouse_id: undefined,
-        details: [{ material_id: undefined, location_id: undefined, qty: 1 }],
+        details: [{ material_id: undefined, qty: 1 }],
        })
      if (dir === 'in') {
         poApi.list({ page: 1, size: 200 }).then((res) => {
@@ -146,7 +142,6 @@ export default function InventoryPage() {
           warehouse_id: values.warehouse_id,
           details: (values.details || []).map((d) => ({
             material_id: d.material_id,
-            location_id: d.location_id || 0,
             qty: String(d.qty),
            })),
         }
@@ -331,25 +326,15 @@ export default function InventoryPage() {
                            name={[f.name, 'material_id']}
                            rules={[{ required: true, message: '选物料' }]}>
                             <Select
-                            style={{ width: 220 }}
+                            style={{ width: 260 }}
                             options={matOpts}
                             placeholder="物料"
                             showSearch
                             optionFilterProp="label"
                             />
                            </Form.Item>
-                           <Form.Item name={[f.name, 'location_id']}>
-                            <Select
-                            style={{ width: 140 }}
-                            allowClear
-                            options={locOpts}
-                            placeholder="库位"
-                            showSearch
-                            optionFilterProp="label"
-                            />
-                           </Form.Item>
                            <Form.Item name={[f.name, 'qty']} rules={[{ required: true, message: '数量' }]}>
-                            <InputNumber min={0} step={0.0001} style={{ width: 120 }} placeholder="数量" />
+                            <InputNumber min={0} step={0.0001} style={{ width: 140 }} placeholder="数量" />
                            </Form.Item>
                            <Button
                            type="text"

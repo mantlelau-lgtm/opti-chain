@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -37,7 +38,7 @@ func NewBOMRepo(db *gormDB) *BOMRepo {
 	return &BOMRepo{tenantRepo: newTenantRepo[model.BOM](db), db: db}
 }
 
-func (r *BOMRepo) GetWithDetails(t, id uint) (*model.BOM, error) {
+func (r *BOMRepo) GetWithDetails(ctx context.Context, t, id uint) (*model.BOM, error) {
 	var b model.BOM
 	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&b, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -49,7 +50,7 @@ func (r *BOMRepo) GetWithDetails(t, id uint) (*model.BOM, error) {
 }
 
 // CreateWithDetails inserts a BOM and its lines in one transaction.
-func (r *BOMRepo) CreateWithDetails(t uint, b *model.BOM) error {
+func (r *BOMRepo) CreateWithDetails(ctx context.Context, t uint, b *model.BOM) error {
 	b.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(b).Error; err != nil {
@@ -67,7 +68,7 @@ func (r *BOMRepo) CreateWithDetails(t uint, b *model.BOM) error {
 
 // UpdateWithDetails replaces a BOM header + lines (DRAFT only, enforced by
 // the service). Lines are wiped and re-inserted.
-func (r *BOMRepo) UpdateWithDetails(t uint, b *model.BOM) error {
+func (r *BOMRepo) UpdateWithDetails(ctx context.Context, t uint, b *model.BOM) error {
 	b.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("bom_id = ?", b.ID).Delete(&model.BOMDetail{}).Error; err != nil {
@@ -100,7 +101,7 @@ func (r *BOMRepo) List(f ListFilter, out *[]model.BOM, total *int64) error {
 }
 
 // ListByProduct returns all versions of a product's BOMs, newest first.
-func (r *BOMRepo) ListByProduct(t, productID uint, out *[]model.BOM) error {
+func (r *BOMRepo) ListByProduct(ctx context.Context, t, productID uint, out *[]model.BOM) error {
 	return r.db.DB.Preload("Details").
 		Where("tenant_id = ? AND product_id = ?", t, productID).
 		Order("version DESC").
@@ -108,7 +109,7 @@ func (r *BOMRepo) ListByProduct(t, productID uint, out *[]model.BOM) error {
 }
 
 // DefaultByProduct loads the effective (RELEASED) BOM of a product.
-func (r *BOMRepo) DefaultByProduct(t, productID uint) (*model.BOM, error) {
+func (r *BOMRepo) DefaultByProduct(ctx context.Context, t, productID uint) (*model.BOM, error) {
 	var b model.BOM
 	if err := r.db.DB.Preload("Details").
 		Where("tenant_id = ? AND product_id = ? AND is_default = ? AND status = ?", t, productID, true, model.BOMStatusReleased).
@@ -122,7 +123,7 @@ func (r *BOMRepo) DefaultByProduct(t, productID uint) (*model.BOM, error) {
 }
 
 // CountByProduct returns how many BOM versions a product has.
-func (r *BOMRepo) CountByProduct(t, productID uint) (int64, error) {
+func (r *BOMRepo) CountByProduct(ctx context.Context, t, productID uint) (int64, error) {
 	var n int64
 	err := r.db.DB.Model(&model.BOM{}).
 		Where("tenant_id = ? AND product_id = ?", t, productID).Count(&n).Error

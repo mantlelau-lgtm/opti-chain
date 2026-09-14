@@ -7,6 +7,12 @@
 *.out
 bin/
 dist/
+# Project built binaries (from go build ./cmd/...)
+server
+scm-mcp
+
+# Runtime user uploads (default ./uploads)
+uploads/
 
 # Frontend
 web/node_modules/

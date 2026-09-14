@@ -8,7 +8,6 @@ import SupplierPage from './pages/SupplierPage.jsx'
 import SupplierMaterialPage from './pages/SupplierMaterialPage.jsx'
 import CustomerPage from './pages/CustomerPage.jsx'
 import WarehousePage from './pages/WarehousePage.jsx'
-import LocationPage from './pages/LocationPage.jsx'
 import PurchaseOrderPage from './pages/PurchaseOrderPage.jsx'
 import SalesOrderPage from './pages/SalesOrderPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
@@ -21,9 +20,11 @@ import ApprovalGroupPage from './pages/ApprovalGroupPage.jsx'
 import ApiKeyPage from './pages/ApiKeyPage.jsx'
 import AssistantPage from './pages/AssistantPage.jsx'
 import BOMPage from './pages/BOMPage.jsx'
+import ProductPage from './pages/ProductPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
 import PlanningPage from './pages/PlanningPage.jsx'
+import LogisticsPage from './pages/LogisticsPage.jsx'
 
 // Business guard: business tenants only; the platform tenant is routed to the
 // separate platform console.
@@ -63,7 +64,6 @@ export default function App() {
           <Route path="supplier-material" element={<SupplierMaterialPage />} />
           <Route path="customers" element={<CustomerPage />} />
           <Route path="warehouses" element={<WarehousePage />} />
-          <Route path="locations" element={<LocationPage />} />
           <Route path="purchase-orders" element={<PurchaseOrderPage />} />
           <Route path="sales-orders" element={<SalesOrderPage />} />
           <Route path="users" element={<UsersPage />} />
@@ -73,9 +73,11 @@ export default function App() {
           <Route path="approval-groups" element={<ApprovalGroupPage />} />
           <Route path="operation-logs" element={<OperationLogPage />} />
           <Route path="boms" element={<BOMPage />} />
+          <Route path="products" element={<ProductPage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="planning" element={<PlanningPage />} />
+          <Route path="logistics" element={<LogisticsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

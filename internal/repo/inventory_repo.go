@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -21,7 +22,7 @@ func (r *StockRepo) List(f ListFilter, out *[]model.Stock, total *int64) error {
 }
 
 // GetByComposite fetches a stock row by (tenant, warehouse, location, material).
-func (r *StockRepo) GetByComposite(t, wh, loc, mat uint) (*model.Stock, error) {
+func (r *StockRepo) GetByComposite(ctx context.Context, t, wh, loc, mat uint) (*model.Stock, error) {
 	var s model.Stock
 	err := r.db.DB.Where("tenant_id = ? AND warehouse_id = ? AND location_id = ? AND material_id = ?", t, wh, loc, mat).
 		First(&s).Error
@@ -133,7 +134,7 @@ func (r *StockRepo) LockedRowsInTx(tx *gorm.DB, t, matID uint) ([]model.Stock, e
 
 // SumByMaterial returns total on-hand quantity for a material across all
 // warehouses/locations of one tenant.
-func (r *StockRepo) SumByMaterial(t, matID uint) (decimal.Decimal, error) {
+func (r *StockRepo) SumByMaterial(ctx context.Context, t, matID uint) (decimal.Decimal, error) {
 	var res struct {
 		Qty decimal.Decimal
 	}
@@ -157,7 +158,7 @@ func NewInventoryOrderRepo(db *gormDB) *InventoryOrderRepo {
 	}
 }
 
-func (r *InventoryOrderRepo) GetWithDetails(t, id uint) (*model.InventoryOrder, error) {
+func (r *InventoryOrderRepo) GetWithDetails(ctx context.Context, t, id uint) (*model.InventoryOrder, error) {
 	var o model.InventoryOrder
 	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&o, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -168,7 +169,7 @@ func (r *InventoryOrderRepo) GetWithDetails(t, id uint) (*model.InventoryOrder, 
 	return &o, nil
 }
 
-func (r *InventoryOrderRepo) CreateWithDetails(t uint, o *model.InventoryOrder) error {
+func (r *InventoryOrderRepo) CreateWithDetails(ctx context.Context, t uint, o *model.InventoryOrder) error {
 	o.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(o).Error; err != nil {

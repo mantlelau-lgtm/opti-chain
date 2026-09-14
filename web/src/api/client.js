@@ -4,7 +4,7 @@ import axios from 'axios'
 // the Go backend), keeping the frontend fully decoupled from the backend host.
 const client = axios.create({
   baseURL: '/api/v1',
-  timeout: 15000,
+  timeout: 300000,
 })
 
 const TOKEN_KEY = 'scm_token'

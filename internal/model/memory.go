@@ -7,13 +7,16 @@ import "time"
 // as immediate context.
 type AssistantMemory struct {
 	BaseModel
-	TenantID       uint   `gorm:"column:tenant_id;not null;index"`
-	UserID         uint   `gorm:"column:user_id;not null;index"`
-	AgentRole      string `gorm:"column:agent_role;size:64"`
-	UserMessage    string `gorm:"column:user_message;type:text;not null"`
-	AssistantReply string `gorm:"column:assistant_reply;type:text"`
-	ToolCalls      string `gorm:"column:tool_calls;size:1024"`       // JSON array of tool names
-	Consolidated   bool   `gorm:"column:consolidated;default:false"` // extracted to long-term graph
+	TenantID            uint   `gorm:"column:tenant_id;not null;index"`
+	UserID              uint   `gorm:"column:user_id;not null;index"`
+	AgentRole           string `gorm:"column:agent_role;size:64"`
+	AgentName           string `gorm:"column:agent_name;size:64"`
+	UserMessage         string `gorm:"column:user_message;type:text;not null"`
+	UserAttachmentsJSON string `gorm:"column:user_attachments_json;type:text"` // JSON array of attachments
+	AssistantReply      string `gorm:"column:assistant_reply;type:text"`
+	AssistantUsageJSON  string `gorm:"column:assistant_usage_json;type:text"`  // JSON AssistantUsage
+	ToolCalls           string `gorm:"column:tool_calls;size:1024"`            // JSON array of tool names
+	Consolidated        bool   `gorm:"column:consolidated;default:false"`      // extracted to long-term graph
 }
 
 func (AssistantMemory) TableName() string { return "sys_assistant_memory" }

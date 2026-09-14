@@ -5,6 +5,8 @@
 package repository
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -77,15 +79,33 @@ func newTenantRepo[T any](db *gormDB) *tenantRepo[T] {
 }
 
 // Create stamps the tenant discriminator and inserts.
-func (r *tenantRepo[T]) Create(t uint, v *T) error {
+func (r *tenantRepo[T]) Create(ctx context.Context, t uint, v *T) error {
 	if m, ok := any(v).(model.Tenanted); ok {
 		m.SetTenantID(t)
 	}
 	return r.db.DB.Create(v).Error
 }
 
+// CreateBatch stamps the tenant discriminator on every item and inserts them
+// inside a single DB transaction — either all succeed or the whole batch is
+// rolled back. Use this for "批量写入" scenarios so the agent never falls
+// back to page-flipping queries followed by N single inserts.
+func (r *tenantRepo[T]) CreateBatch(ctx context.Context, t uint, vs []T) error {
+	if len(vs) == 0 {
+		return nil
+	}
+	for i := range vs {
+		if m, ok := any(&vs[i]).(model.Tenanted); ok {
+			m.SetTenantID(t)
+		}
+	}
+	return r.db.DB.Transaction(func(tx *gorm.DB) error {
+		return tx.Create(&vs).Error
+	})
+}
+
 // Get returns one record scoped to the tenant, nil when absent.
-func (r *tenantRepo[T]) Get(t, id uint) (*T, error) {
+func (r *tenantRepo[T]) Get(ctx context.Context, t, id uint) (*T, error) {
 	var v T
 	if err := r.db.DB.Where("tenant_id = ?", t).First(&v, id).Error; err != nil {
 		if errorsIsNotFound(err) {
@@ -97,7 +117,7 @@ func (r *tenantRepo[T]) Get(t, id uint) (*T, error) {
 }
 
 // Update persists the record, forcing the caller's tenant onto it.
-func (r *tenantRepo[T]) Update(t uint, v *T) error {
+func (r *tenantRepo[T]) Update(ctx context.Context, t uint, v *T) error {
 	if m, ok := any(v).(model.Tenanted); ok {
 		m.SetTenantID(t)
 	}
@@ -105,7 +125,7 @@ func (r *tenantRepo[T]) Update(t uint, v *T) error {
 }
 
 // Delete removes a record only within the tenant.
-func (r *tenantRepo[T]) Delete(t, id uint) error {
+func (r *tenantRepo[T]) Delete(ctx context.Context, t, id uint) error {
 	var zero T
 	return r.db.DB.Where("tenant_id = ?", t).Delete(&zero, id).Error
 }

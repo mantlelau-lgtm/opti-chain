@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"scm/pkg/response"
 	"scm/internal/service"
+	"scm/pkg/response"
 )
 
 // PurchaseOrderHandler exposes purchase-order endpoints.
@@ -27,12 +27,11 @@ type poCreateRequest struct {
 		MaterialID uint   `json:"material_id"`
 		OrderQty   string `json:"order_qty"`
 		UnitPrice  string `json:"unit_price"`
-		LocationID uint   `json:"location_id"`
 	} `json:"details"`
 }
 
 func (h *PurchaseOrderHandler) List(c *gin.Context) {
-	list, total, err := h.svc.List(tenantOf(c), parsePage(c))
+	list, total, err := h.svc.List(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -40,7 +39,7 @@ func (h *PurchaseOrderHandler) List(c *gin.Context) {
 }
 
 func (h *PurchaseOrderHandler) Get(c *gin.Context) {
-	po, err := h.svc.Get(tenantOf(c), idParam(c))
+	po, err := h.svc.Get(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -74,10 +73,10 @@ func (h *PurchaseOrderHandler) Create(c *gin.Context) {
 			MaterialID: d.MaterialID,
 			OrderQty:   oq,
 			UnitPrice:  up,
-			LocationID: d.LocationID,
+			LocationID: 0,
 		})
 	}
-	po, err := h.svc.Create(tenantOf(c), in)
+	po, err := h.svc.Create(c.Request.Context(), tenantOf(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -105,7 +104,7 @@ func (h *PurchaseOrderHandler) Update(c *gin.Context) {
 		in.ExpectedDeliveryDate = &ed
 	}
 	if len(req.Details) == 0 {
-		po, err := h.svc.UpdateHeader(tenantOf(c), idParam(c), in)
+		po, err := h.svc.UpdateHeader(c.Request.Context(), tenantOf(c), idParam(c), in)
 		if mapErr(c, err) {
 			return
 		}
@@ -119,10 +118,10 @@ func (h *PurchaseOrderHandler) Update(c *gin.Context) {
 			MaterialID: d.MaterialID,
 			OrderQty:   oq,
 			UnitPrice:  up,
-			LocationID: d.LocationID,
+			LocationID: 0,
 		})
 	}
-	po, err := h.svc.UpdateFull(tenantOf(c), idParam(c), in)
+	po, err := h.svc.UpdateFull(c.Request.Context(), tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -138,14 +137,14 @@ func (h *PurchaseOrderHandler) SetStatus(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.svc.SetStatus(tenantOf(c), idParam(c), body.Status); mapErr(c, err) {
+	if err := h.svc.SetStatus(c.Request.Context(), tenantOf(c), idParam(c), body.Status); mapErr(c, err) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c), "status": body.Status})
 }
 
 func (h *PurchaseOrderHandler) Delete(c *gin.Context) {
-	if mapErr(c, h.svc.Delete(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.svc.Delete(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

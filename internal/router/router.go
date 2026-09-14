@@ -27,6 +27,7 @@ type Handlers struct {
 	Approval  *handler.ApprovalHandler
 	ApiKey    *handler.ApiKeyHandler
 	Assistant *handler.AssistantHandler
+	Logistics *handler.LogisticsHandler
 }
 
 // New builds a configured gin engine with all routes registered. authMW
@@ -51,9 +52,13 @@ func New(corsOrigin string, h *Handlers, authMW, permMW, auditMW gin.HandlerFunc
 		protected.PUT("/rbac/roles/:id/permissions", h.RBAC.RoleSetPermissions)
 		protected.GET("/operation-logs", h.AuditLog.List)
 		protected.POST("/assistant/chat", h.Assistant.Chat)
+		protected.POST("/assistant/upload", h.Assistant.Upload)
+		protected.GET("/assistant/attachment", h.Assistant.DownloadAttachment)
+		protected.GET("/assistant/attachment/*path", h.Assistant.DownloadAttachment)
 		protected.GET("/assistant/memory", h.Assistant.GetHistory)
 		protected.DELETE("/assistant/memory", h.Assistant.ClearMemory)
 		registerStorage(protected, h.Storage)
+		registerLogistics(protected, h.Logistics)
 		registerApproval(protected, h.Approval)
 		registerApiKey(protected, h.ApiKey)
 		registerBase(protected, h.Base)
@@ -191,14 +196,6 @@ func registerBase(g *gin.RouterGroup, h *handler.BaseDataHandler) {
 		w.PUT("/:id", h.WarehouseUpdate)
 		w.DELETE("/:id", h.WarehouseDelete)
 	}
-	l := g.Group("/locations")
-	{
-		l.GET("", h.LocationList)
-		l.GET("/:id", h.LocationGet)
-		l.POST("", h.LocationCreate)
-		l.PUT("/:id", h.LocationUpdate)
-		l.DELETE("/:id", h.LocationDelete)
-	}
 }
 
 func registerProcurement(g *gin.RouterGroup, h *handler.PurchaseOrderHandler, r *handler.ReceivingHandler) {
@@ -262,5 +259,14 @@ func registerPlanning(g *gin.RouterGroup, h *handler.PlanningHandler) {
 		p.DELETE("/mrp/:id", h.MrpDelete)
 		p.POST("/mrp/compute", h.ComputeMRP)
 		p.POST("/mrp/:id/convert", h.MrpConvert)
+	}
+}
+
+func registerLogistics(g *gin.RouterGroup, h *handler.LogisticsHandler) {
+	lg := g.Group("/logistics")
+	{
+		lg.POST("/query", h.Query)
+		lg.POST("/upload", h.Upload)
+		lg.GET("", h.List)
 	}
 }

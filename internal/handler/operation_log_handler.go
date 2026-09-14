@@ -31,7 +31,7 @@ func (h *OperationLogHandler) List(c *gin.Context) {
 		DateFrom: c.Query("date_from"),
 		DateTo:   c.Query("date_to"),
 	}
-	list, total, err := h.svc.Search(tenantOf(c), parsePage(c), af)
+	list, total, err := h.svc.Search(c.Request.Context(), tenantOf(c), parsePage(c), af)
 	if mapErr(c, err) {
 		return
 	}

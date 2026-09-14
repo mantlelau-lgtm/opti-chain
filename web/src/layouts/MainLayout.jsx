@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   DatabaseOutlined, TeamOutlined, ContainerOutlined,
   BranchesOutlined, ShoppingCartOutlined, InboxOutlined,
-  FundOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
+  FundOutlined, CarOutlined, UserOutlined, ShopOutlined, LogoutOutlined,
   SettingOutlined, ExperimentOutlined, ApartmentOutlined, FileSearchOutlined, AuditOutlined,
   KeyOutlined, RobotOutlined,
 } from '@ant-design/icons'
@@ -17,25 +17,42 @@ const { Title } = Typography
 // Menu entries carry the permission that gates them; the sidebar renders only
 // what the actor holds (permission catalog lives in DB tables, surfaced via
 // /auth/me).
+const GROUP_ORDER = ['工作台', '销售', '计划', '采购', '仓储', '研发', '基础数据', '系统设置']
+
 const items = [
+  // 工作台（顶部）
   { key: '/approvals', icon: <AuditOutlined />, label: '审批列表', group: '工作台', perm: 'approval:view' },
   { key: '/assistant', icon: <RobotOutlined />, label: '智能助手', group: '工作台', perm: '' },
   { key: '/api-keys', icon: <KeyOutlined />, label: '密钥签发', group: '工作台', perm: '' },
-  { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
-  { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
-  { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
-  { key: '/supplier-material', icon: <ApartmentOutlined />, label: '供应关系', group: '基础数据', perm: 'supplier:view' },
-  { key: '/customers', icon: <UserOutlined />, label: '客户', group: '基础数据', perm: 'customer:view' },
-  { key: '/warehouses', icon: <ContainerOutlined />, label: '仓库', group: '基础数据', perm: 'warehouse:view' },
-  { key: '/locations', icon: <BranchesOutlined />, label: '库位', group: '基础数据', perm: 'warehouse:view' },
-  { key: '/purchase-orders', icon: <ShoppingCartOutlined />, label: '采购订单', group: '采购', perm: 'po:view' },
+
+  // 销售
   { key: '/sales-orders', icon: <ShopOutlined />, label: '销售订单', group: '销售', perm: 'so:view' },
+
+  // 计划
+  { key: '/planning', icon: <FundOutlined />, label: '计划/MRP', group: '计划', perm: 'demand:view' },
+
+  // 采购
+  { key: '/purchase-orders', icon: <ShoppingCartOutlined />, label: '采购订单', group: '采购', perm: 'po:view' },
+
+  // 仓储
   { key: '/stock', icon: <InboxOutlined />, label: '实时库存', group: '仓储', perm: 'stock:view' },
   { key: '/inventory', icon: <ContainerOutlined />, label: '出入库', group: '仓储', perm: 'inv:move' },
-  { key: '/planning', icon: <FundOutlined />, label: '计划/MRP', group: '计划', perm: 'demand:view' },
-  { key: '/users', icon: <SettingOutlined />, label: '用户管理', group: '系统', perm: 'user:manage' },
-  { key: '/approval-groups', icon: <SettingOutlined />, label: '审批组管理', group: '系统', perm: 'approval:manage' },
-  { key: '/operation-logs', icon: <FileSearchOutlined />, label: '操作日志', group: '系统', perm: 'audit:view' },
+  { key: '/logistics', icon: <CarOutlined />, label: '物流跟踪', group: '仓储', perm: 'logistics:view' },
+
+  // 研发
+  { key: '/products', icon: <ApartmentOutlined />, label: '产品列表', group: '研发', perm: 'bom:view' },
+  { key: '/boms', icon: <ExperimentOutlined />, label: 'BOM 管理', group: '研发', perm: 'bom:view' },
+
+  // 基础数据（放到最后，倒数第二）
+  { key: '/materials', icon: <DatabaseOutlined />, label: '物料', group: '基础数据', perm: 'material:view' },
+  { key: '/suppliers', icon: <TeamOutlined />, label: '供应商', group: '基础数据', perm: 'supplier:view' },
+  { key: '/customers', icon: <UserOutlined />, label: '客户', group: '基础数据', perm: 'customer:view' },
+  { key: '/warehouses', icon: <ContainerOutlined />, label: '仓库', group: '基础数据', perm: 'warehouse:view' },
+
+  // 系统设置（放到最后，原名"系统"）
+  { key: '/users', icon: <SettingOutlined />, label: '用户管理', group: '系统设置', perm: 'user:manage' },
+  { key: '/approval-groups', icon: <SettingOutlined />, label: '审批组管理', group: '系统设置', perm: 'approval:manage' },
+  { key: '/operation-logs', icon: <FileSearchOutlined />, label: '操作日志', group: '系统设置', perm: 'audit:view' },
 ]
 
 export default function MainLayout() {
@@ -77,6 +94,14 @@ export default function MainLayout() {
     return acc
   }, {})
 
+  const sortedGroupEntries = GROUP_ORDER
+    .filter((g) => Object.prototype.hasOwnProperty.call(groups, g))
+    .map((g) => [g, groups[g]])
+  // Append any ad-hoc groups not listed in GROUP_ORDER to the very end.
+  Object.keys(groups).forEach((g) => {
+    if (!GROUP_ORDER.includes(g)) sortedGroupEntries.push([g, groups[g]])
+  })
+
   const user = auth.user()
 
   return (
@@ -90,7 +115,7 @@ export default function MainLayout() {
            mode="inline"
            selectedKeys={[loc.pathname]}
            defaultOpenKeys={['工作台']}
-           items={Object.entries(groups).map(([g, children]) => ({
+           items={sortedGroupEntries.map(([g, children]) => ({
              key: g,
              label: g,
              children,

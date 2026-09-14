@@ -39,7 +39,7 @@ func (h *ApiKeyHandler) List(c *gin.Context) {
 	if a == nil {
 		return
 	}
-	list, total, err := h.svc.List(a.TenantID, a.UserID, parsePage(c))
+	list, total, err := h.svc.List(c.Request.Context(), a.TenantID, a.UserID, parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -71,7 +71,7 @@ func (h *ApiKeyHandler) Create(c *gin.Context) {
 	// Permission set is derived from the user's current roles (never chosen by
 	// hand), so the key can only ever do what the user themselves can do.
 	perms := strings.Join(h.rbac.PermsForActor(a), ",")
-	key, sk, err := h.svc.CreateKey(a.TenantID, a.UserID, req.Name, perms, exp)
+	key, sk, err := h.svc.CreateKey(c.Request.Context(), a.TenantID, a.UserID, req.Name, perms, exp)
 	if mapErr(c, err) {
 		return
 	}
@@ -84,7 +84,7 @@ func (h *ApiKeyHandler) Disable(c *gin.Context) {
 	if a == nil {
 		return
 	}
-	if mapErr(c, h.svc.Disable(a.TenantID, a.UserID, idParam(c))) {
+	if mapErr(c, h.svc.Disable(c.Request.Context(), a.TenantID, a.UserID, idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -95,7 +95,7 @@ func (h *ApiKeyHandler) Enable(c *gin.Context) {
 	if a == nil {
 		return
 	}
-	if mapErr(c, h.svc.Enable(a.TenantID, a.UserID, idParam(c))) {
+	if mapErr(c, h.svc.Enable(c.Request.Context(), a.TenantID, a.UserID, idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -106,7 +106,7 @@ func (h *ApiKeyHandler) Delete(c *gin.Context) {
 	if a == nil {
 		return
 	}
-	if mapErr(c, h.svc.Delete(a.TenantID, a.UserID, idParam(c))) {
+	if mapErr(c, h.svc.Delete(c.Request.Context(), a.TenantID, a.UserID, idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

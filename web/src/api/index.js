@@ -27,9 +27,38 @@ export const apiKeyApi = {
   remove: (id) => api.remove(`/api-keys/${id}`),
 }
 export const assistantApi = {
-  chat: (message) => client.post('/assistant/chat', { message }),
+  chat: (payload) => {
+    if (payload && (payload.files || payload.attachments)) {
+      const fd = new FormData()
+      if (payload.message) fd.append('message', payload.message)
+      if (payload.files) {
+        payload.files.forEach((f) => fd.append('files', f))
+      }
+      if (payload.attachments) {
+        fd.append('attachments', JSON.stringify(payload.attachments))
+      }
+      return client.post('/assistant/chat', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+    return client.post('/assistant/chat', { message: payload?.message ?? payload })
+  },
+  upload: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post('/assistant/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  attachmentUrl: (storedAt) => {
+    // Pass the stored-at path via query string so the backend can verify it
+    // still lives inside the upload dir (path-traversal safe).
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/api/v1'
+    return `${base}/assistant/attachment?path=${encodeURIComponent(storedAt)}`
+  },
   getHistory: () => client.get('/assistant/memory'),
   clearMemory: () => client.delete('/assistant/memory'),
+}
+export const logisticsApi = {
+  query: (trackingNo) => client.post('/logistics/query', { tracking_no: trackingNo }),
+  upload: (form) => client.post('/logistics/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  list: (params) => api.list('/logistics', params),
 }
 
 // Generic REST helpers used by every resource module. Each returns the
@@ -64,13 +93,6 @@ export const warehouseApi = {
   create: (d) => api.create('/warehouses', d),
   update: (id, d) => api.update(`/warehouses/${id}`, d),
   remove: (id) => api.remove(`/warehouses/${id}`),
-}
-export const locationApi = {
-  list: (p) => api.list('/locations', p),
-  get: (id) => api.get(`/locations/${id}`),
-  create: (d) => api.create('/locations', d),
-  update: (id, d) => api.update(`/locations/${id}`, d),
-  remove: (id) => api.remove(`/locations/${id}`),
 }
 
 // ---- Procurement ----

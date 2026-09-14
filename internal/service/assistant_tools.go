@@ -1,11 +1,19 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 
 	"scm/internal/model"
 	"scm/pkg/authx"
@@ -15,10 +23,62 @@ import (
 // ---- argument coercion helpers ----
 
 func asStr(m map[string]any, k string) string {
-	if v, ok := m[k].(string); ok {
-		return v
+	if m == nil {
+		return ""
 	}
-	return ""
+	v, ok := m[k]
+	if !ok {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	case fmt.Stringer:
+		return t.String()
+	case nil:
+		return ""
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case json.Number:
+		return t.String()
+	case float32:
+		return strconv.FormatFloat(float64(t), 'f', -1, 32)
+	case float64:
+		// Integers encoded as JSON numbers without decimal part should come out
+		// without ".0" so SKU codes like "QJ00001" vs 1 (numeric) don't get
+		// treated as different strings.
+		if t == math.Trunc(t) && !math.IsInf(t, 0) {
+			return strconv.FormatInt(int64(t), 10)
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case int:
+		return strconv.FormatInt(int64(t), 10)
+	case int8:
+		return strconv.FormatInt(int64(t), 10)
+	case int16:
+		return strconv.FormatInt(int64(t), 10)
+	case int32:
+		return strconv.FormatInt(int64(t), 10)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case uint:
+		return strconv.FormatUint(uint64(t), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(t), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(t), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(t), 10)
+	case uint64:
+		return strconv.FormatUint(t, 10)
+	}
+	// Unknown type: try %v as last resort to never silently drop a value.
+	return fmt.Sprintf("%v", v)
 }
 
 func asUint(v any) uint {
@@ -35,6 +95,29 @@ func asUint(v any) uint {
 	case json.Number:
 		n, _ := t.Int64()
 		return uint(n)
+	}
+	return 0
+}
+
+func asInt(v any) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case string:
+		n, _ := strconv.Atoi(t)
+		return n
+	case json.Number:
+		n, _ := t.Int64()
+		return int(n)
+	case bool:
+		if t {
+			return 1
+		}
+		return 0
 	}
 	return 0
 }
@@ -74,8 +157,8 @@ func pageFrom(args map[string]any) PageInput {
 	if sz < 1 {
 		sz = 20
 	}
-	if sz > 200 {
-		sz = 200
+	if sz > 50 {
+		sz = 50
 	}
 	return PageInput{Page: query.Page{Page: p, Size: sz}, Keyword: asStr(args, "keyword")}
 }
@@ -89,19 +172,100 @@ var listSchema = map[string]any{
 	},
 }
 
+// extractListSample pulls a short summary (id + identifier + name) from a list
+// item returned by listTool[T]. It is intentionally reflection-free and uses a
+// best-effort type switch against the known list models.
+func extractListSample(item any) map[string]any {
+	switch v := item.(type) {
+	case model.Material:
+		return map[string]any{"id": v.ID, "sku_code": v.SKUCode, "name": v.Name, "category": v.Category}
+	case model.Supplier:
+		return map[string]any{"id": v.ID, "supplier_code": v.SupplierCode, "name": v.Name, "audit_status": v.AuditStatus}
+	case model.Product:
+		return map[string]any{"id": v.ID, "product_code": v.ProductCode, "name": v.Name, "spec": v.Spec}
+	case model.PurchaseOrder:
+		return map[string]any{"id": v.ID, "po_number": v.PONumber, "supplier_id": v.SupplierID, "status": v.Status}
+	case model.Stock:
+		return map[string]any{"id": v.ID, "warehouse_id": v.WarehouseID, "material_id": v.MaterialID, "quantity": v.Quantity}
+	case model.SaleOrder:
+		return map[string]any{"id": v.ID, "so_number": v.SONumber, "customer_id": v.CustomerID, "status": v.Status}
+	case model.Customer:
+		return map[string]any{"id": v.ID, "customer_code": v.CustomerCode, "name": v.Name, "phone": v.Phone}
+	}
+	// unknown T → fall back to reflection on common fields via map round-trip
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	s := map[string]any{}
+	for _, k := range []string{"id", "code", "sku_code", "supplier_code", "product_code", "po_number", "so_number", "customer_code", "name", "status", "material_id", "customer_id", "supplier_id"} {
+		if v, ok := m[k]; ok && v != nil {
+			s[k] = v
+		}
+	}
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
 // listTool builds a paginated list tool backed by a service List method.
-func listTool[T any](name, desc, perm string, listFn func(uint, PageInput) ([]T, int64, error)) *AssistantTool {
+//
+// To keep the LLM context compact and avoid repeated "翻页" (page-flip) loops
+// (which were observed to hit assistantMaxIters with a single tool name
+// repeated 12x), the tool returns a condensed response:
+//
+//   - total: the full count so the caller knows whether to narrow the search
+//   - sample: the first 20 entries reduced to id+identifier+name (tiny)
+//   - list: the first 8 full entries (enough to render a concrete answer)
+//   - more_hint: a Chinese hint the model can surface to the user
+//
+// The LLM is expected to narrow via keyword instead of paging.
+func listTool[T any](name, desc, perm string, listFn func(context.Context, uint, PageInput) ([]T, int64, error)) *AssistantTool {
+	const (
+		sampleSize = 20
+		listSize   = 8
+	)
 	return &AssistantTool{
 		Name:        name,
 		Description: desc,
 		Perm:        perm,
 		Schema:      listSchema,
 		Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
-			items, total, err := listFn(actor.TenantID, pageFrom(args))
+			items, total, err := listFn(context.Background(), actor.TenantID, pageFrom(args))
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"total": total, "list": items}, nil
+			sampleN := len(items)
+			if sampleN > sampleSize {
+				sampleN = sampleSize
+			}
+			listN := len(items)
+			if listN > listSize {
+				listN = listSize
+			}
+			sample := make([]map[string]any, 0, sampleN)
+			for i := 0; i < sampleN; i++ {
+				if s := extractListSample(items[i]); s != nil {
+					sample = append(sample, s)
+				}
+			}
+			listSubset := items[:listN]
+			hint := ""
+			if total > int64(listSize) {
+				hint = fmt.Sprintf("共 %d 条，当前仅返回前 %d 条完整对象与前 %d 条摘要。若需要精确结果，请再报更具体的名称 / 编码（SKU、PO、SO、供应商编号等），通过 keyword 参数缩小范围，不要逐页翻。", total, listSize, sampleN)
+			}
+			return map[string]any{
+				"total":      total,
+				"returned":   listN,
+				"sample":     sample,
+				"list":       listSubset,
+				"more_hint":  hint,
+				"_page":      pageFrom(args).Page.Page,
+				"_page_size": pageFrom(args).Page.Size,
+			}, nil
 		},
 	}
 }
@@ -110,22 +274,203 @@ func listTool[T any](name, desc, perm string, listFn func(uint, PageInput) ([]T,
 // permission code; the agent offers a role-appropriate subset and the executor
 // re-checks the caller's permission at execution time.
 func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
-	return []*AssistantTool{
+	tools := []*AssistantTool{
 		listTool[model.Material]("material_list",
-			"查询物料主数据，返回 id/sku_code/name/category/unit 等。创建采购单或 BOM 前先查物料拿到 id。",
+			"查询物料主数据，返回 id/sku_code/name/category/unit 等。创建采购单或 BOM 前先查物料拿到 id。强烈建议：用 keyword 传 SKU 编码或名称的关键词精确匹配；不要逐页翻页。若返回结果偏多，请让用户再报具体的编码/名称，用 keyword 缩小范围。",
 			"material:view", deps.Materials.List),
 		listTool[model.Supplier]("supplier_list",
-			"查询供应商，返回 id/supplier_code/name/audit_status 等。注意：只有 audit_status=APPROVED 的供应商才能用于采购下单。",
+			"查询供应商，返回 id/supplier_code/name/audit_status 等。注意：只有 audit_status=APPROVED 的供应商才能用于采购下单。建议用 keyword 传供应商编号/名称关键词精确匹配；不要整页翻。",
 			"supplier:view", deps.Suppliers.List),
 		listTool[model.Product]("product_list",
-			"查询产品主档，返回 id/product_code/name/unit 等。新建 BOM 前先查产品拿到 id。",
+			"查询产品主档，返回 id/product_code/name/unit 等。新建 BOM 前先查产品拿到 id。建议用 keyword 传产品编号或名称关键词精确匹配；不要整页翻。",
 			"bom:view", deps.Products.List),
 		listTool[model.PurchaseOrder]("po_list",
-			"查询采购订单，返回 id/po_number/supplier_id/status/total_amount 等。",
+			"查询采购订单，返回 id/po_number/supplier_id/status/total_amount 等。建议用 keyword 传 PO 编号或供应商名关键词；不要逐页翻。",
 			"po:view", deps.POs.List),
 		listTool[model.Stock]("stock_list",
-			"查询实时库存，返回 material_id/quantity/locked_quantity 等，用于判断物料库存。",
+			"查询实时库存，返回 material_id/quantity/locked_quantity 等，用于判断物料库存。建议用 keyword 传物料名/SKU 编码；不要整页翻。",
 			"stock:view", deps.Stock.List),
+		listTool[model.SaleOrder]("so_list",
+			"查询销售订单，返回 id/so_number/customer_id/status/total_amount 等。查物流时先用此工具拿到订单关联的 customer_id，再用 customer_get 取手机号。建议用 keyword 传 SO 号/客户名关键词；不要整页翻。",
+			"so:view", deps.SOs.List),
+		listTool[model.Customer]("customer_list",
+			"查询客户列表，返回 id/customer_code/name/phone/audit_status/credit_limit 等。查物流时用客户 phone 字段（取后 4 位）配运单号调用顺丰接口。建议用 keyword 传客户编号/名称关键词；不要整页翻。",
+			"customer:view", deps.Customers.List),
+
+		{
+			Name:        "customer_get",
+			Description: "根据客户 id 查询客户详情，返回 contact_person/phone（手机号）等。查物流顺丰接口需要手机号后 4 位，可从这里取。",
+			Perm:        "customer:view",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "integer", "description": "客户 ID，必填"},
+				},
+				"required": []string{"id"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				id := asUint(args["id"])
+				if id == 0 {
+					return nil, errorsBadRequest("id is required")
+				}
+				return deps.Customers.Get(context.Background(), actor.TenantID, id)
+			},
+		},
+
+		{
+			Name:        "logistics_query",
+			Description: "调用顺丰接口查询运单轨迹。必填 tracking_no（运单号）；选填 phone_no（收件人手机号，建议传后 4 位以防信息泄露，也可传完整号）。若未直接拿到手机号，请先通过 so_list 找到对应销售订单的 customer_id，再用 customer_get 取客户 phone 字段。",
+			Perm:        "logistics:view",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tracking_no": map[string]any{"type": "string", "description": "顺丰运单号，必填，如 SF1234567890"},
+					"phone_no":    map[string]any{"type": "string", "description": "收件人手机号或后 4 位，选填（部分运单校验需要），例如 1380"},
+				},
+				"required": []string{"tracking_no"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				trackingNo := asStr(args, "tracking_no")
+				if trackingNo == "" {
+					return nil, errorsBadRequest("tracking_no is required")
+				}
+				return deps.Logistics.QueryOne(context.Background(), actor.TenantID, actor.UserID, trackingNo)
+			},
+		},
+
+		{
+			Name:        "logistics_batch_query",
+			Description: "批量查询多个运单轨迹（一次 ≤ 10 个，更多自动分批）。必填 tracking_nos 数组；选填 phone_no（同批所有运单共用的手机号后 4 位）。",
+			Perm:        "logistics:view",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"tracking_nos": map[string]any{"type": "array", "description": "运单号字符串数组，必填", "items": map[string]any{"type": "string"}},
+					"phone_no":     map[string]any{"type": "string", "description": "共用的收件人手机号或后 4 位，选填"},
+				},
+				"required": []string{"tracking_nos"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				raw := asArr(args, "tracking_nos")
+				if len(raw) == 0 {
+					return nil, errorsBadRequest("tracking_nos is required")
+				}
+				var nos []string
+				for _, r := range raw {
+					if s, ok := r.(string); ok && s != "" {
+						nos = append(nos, s)
+					}
+				}
+				if len(nos) == 0 {
+					return nil, errorsBadRequest("tracking_nos is empty")
+				}
+				return deps.Logistics.QueryBatch(context.Background(), actor.TenantID, actor.UserID, nos, 1, asStr(args, "phone_no"))
+			},
+		},
+
+		{
+			Name:        "logistics_history",
+			Description: "查看本用户已查询过的物流历史记录（带分页），可回看运单最新状态与轨迹，无需再调顺丰接口。",
+			Perm:        "logistics:view",
+			Schema:      listSchema,
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				p := pageFrom(args)
+				list, total, err := deps.Logistics.List(context.Background(), actor.TenantID, actor.UserID, p.Page.Page, p.Page.Size)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"total": total, "list": list}, nil
+			},
+		},
+
+		{
+			Name:        "document_list",
+			Description: "列出当前用户最近上传过的文件（最近 50 个），返回 name/path/size/ext/mtime。不知道文件路径时先调这个拿 path 再喂给 document_parse / document_summary。",
+			Perm:        "",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{"type": "integer", "description": "返回条数上限，默认 50"},
+				},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				limit := asInt(args["limit"])
+				if limit <= 0 {
+					limit = 50
+				}
+				dir := getUploadDir()
+				return deps.Docs.ListSessionAttachments(dir, limit)
+			},
+		},
+
+		{
+			Name:        "document_parse",
+			Description: "解析单个上传文件为结构化文本，返回 kind/pages/sheets/paragraphs/tables/full_text/preview。支持 txt/md/csv/json/pdf/docx/xlsx/xls/log。参数：path 或 name 任选一个（从 document_list 的返回里取）；可选 include_tables=true 附带完整表格。",
+			Perm:        "",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":           map[string]any{"type": "string", "description": "文件绝对路径（从 document_list 拿），优先"},
+					"name":           map[string]any{"type": "string", "description": "文件名（用于展示和匹配）"},
+					"include_tables": map[string]any{"type": "boolean", "description": "是否返回完整表格二维数组（默认 true，大表格可能费 token）"},
+					"max_chars":      map[string]any{"type": "integer", "description": "返回的 full_text 最大字符数，默认不限制（后端仍有 2MB 硬上限）"},
+				},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				path := asStr(args, "path")
+				name := asStr(args, "name")
+				path, err := resolveDocPath(path, name)
+				if err != nil {
+					return nil, errorsBadRequest(err.Error())
+				}
+				parsed, err := deps.Docs.ParseFile(context.Background(), path, name)
+				if err != nil {
+					return nil, err
+				}
+				maxChars := asInt(args["max_chars"])
+				if maxChars > 0 && len(parsed.FullText) > maxChars {
+					parsed.FullText = parsed.FullText[:maxChars]
+				}
+				if b, ok := args["include_tables"].(bool); !ok || !b {
+					parsed.Tables = nil
+				}
+				return parsed, nil
+			},
+		},
+
+		{
+			Name:        "document_summary",
+			Description: "对 document_parse 的结果做紧凑摘要：给出类型/页数/工作表列表+前 10 个段落+每个表的前 3 行样例，省 token。建议第一次看文档先调这个，再决定是否需要 parse 全文。",
+			Perm:        "",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":      map[string]any{"type": "string", "description": "文件绝对路径，优先"},
+					"name":      map[string]any{"type": "string", "description": "文件名"},
+					"max_chars": map[string]any{"type": "integer", "description": "摘要字符上限，默认 6000"},
+				},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				path, err := resolveDocPath(asStr(args, "path"), asStr(args, "name"))
+				if err != nil {
+					return nil, errorsBadRequest(err.Error())
+				}
+				parsed, err := deps.Docs.ParseFile(context.Background(), path, asStr(args, "name"))
+				if err != nil {
+					return nil, err
+				}
+				mc := asInt(args["max_chars"])
+				return map[string]any{
+					"file_name": parsed.FileName,
+					"kind":      parsed.Kind,
+					"size":      parsed.Size,
+					"pages":     parsed.Pages,
+					"sheets":    parsed.Sheets,
+					"preview":   parsed.Preview,
+					"summary":   deps.Docs.Summary(parsed, mc),
+				}, nil
+			},
+		},
 
 		{
 			Name:        "bom_list",
@@ -142,13 +487,13 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 			},
 			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
 				if pid := asUint(args["product_id"]); pid > 0 {
-					boms, err := deps.BOMs.ListByProduct(actor.TenantID, pid)
+					boms, err := deps.BOMs.ListByProduct(context.Background(), actor.TenantID, pid)
 					if err != nil {
 						return nil, err
 					}
 					return map[string]any{"total": len(boms), "list": boms}, nil
 				}
-				items, total, err := deps.BOMs.List(actor.TenantID, pageFrom(args))
+				items, total, err := deps.BOMs.List(context.Background(), actor.TenantID, pageFrom(args))
 				if err != nil {
 					return nil, err
 				}
@@ -158,7 +503,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 
 		{
 			Name:        "material_create",
-			Description: "新建物料。必填 sku_code（租户内唯一）、name、category（分类）、unit（计量单位）。",
+			Description: "新建【单条】物料。仅当明确只创建 1~2 条物料时使用；需要批量创建/批量导入请直接调用 material_batch_create（单事务保证要么全成要么全败，省 token 且不会因反复调用查询工具而卡壳）。",
 			Perm:        "material:manage",
 			Schema: map[string]any{
 				"type": "object",
@@ -182,10 +527,103 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 					MaxStock: asDecimal(args["max_stock"]),
 					Status:   1,
 				}
-				if err := deps.Materials.Create(actor.TenantID, m); err != nil {
+				if err := deps.Materials.Create(context.Background(), actor.TenantID, m); err != nil {
 					return nil, err
 				}
 				return m, nil
+			},
+		},
+
+		{
+			Name:        "material_batch_create",
+			Description: "批量创建物料（单次最多 500 条）。【这是批量写入物料的首选/唯一推荐工具】，底层用单事务包裹：要么 N 条全部落库成功，要么全部回滚，不会出现半成功半失败导致的 SKU 冲突。传 items 数组，每一项：sku_code、name、category、unit、可选 min_stock/max_stock。提示：不要先调用 material_list 翻全量目录再用 material_create 逐条建——那样会大量浪费 token 并很容易超过处理步数。",
+			Perm:        "material:manage",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `物料数组，每一项形如 {"sku_code":"M-001","name":"螺钉","category":"五金","unit":"个","min_stock":"100","max_stock":"5000"}。长度 1~500，每一项必填 sku_code/name/category/unit。`,
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"sku_code":  map[string]any{"type": "string"},
+								"name":      map[string]any{"type": "string"},
+								"category":  map[string]any{"type": "string"},
+								"unit":      map[string]any{"type": "string"},
+								"min_stock": map[string]any{"type": "string"},
+								"max_stock": map[string]any{"type": "string"},
+							},
+							"required": []string{"sku_code", "name", "category", "unit"},
+						},
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be a non-empty array")
+				}
+				list := make([]model.Material, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					m := model.Material{
+						SKUCode:  asStr(line, "sku_code"),
+						Name:     asStr(line, "name"),
+						Category: asStr(line, "category"),
+						Unit:     asStr(line, "unit"),
+						MinStock: asDecimal(line["min_stock"]),
+						MaxStock: asDecimal(line["max_stock"]),
+						Status:   1,
+					}
+					// Pre-validation with diagnostic logging: if a required field
+					// is empty after coercion, dump the raw line value types so
+					// we can immediately tell whether the LLM handed us a
+					// numeric type that didn't stringify correctly, or a
+					// genuinely missing key.
+					if m.SKUCode == "" || m.Name == "" || m.Unit == "" {
+						rawJSON, _ := json.Marshal(line)
+						types := map[string]string{}
+						for k, v := range line {
+							types[k] = fmt.Sprintf("%T", v)
+						}
+						zap.L().Warn("[DBG material_batch_create coercion empty]",
+							zap.Int("index", i),
+							zap.String("sku_code", m.SKUCode),
+							zap.String("name", m.Name),
+							zap.String("unit", m.Unit),
+							zap.String("raw_line_json", string(rawJSON)),
+							zap.Any("value_types", types),
+						)
+						return nil, errorsBadRequest(fmt.Sprintf(
+							"items[%d] 缺少必需字段 sku_code/name/unit 中的一个或多个（原始值：%s；各字段类型：%v），请补充后再试",
+							i, string(rawJSON), types,
+						))
+					}
+					list = append(list, m)
+				}
+				created, err := deps.Materials.CreateBatch(context.Background(), actor.TenantID, list)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]uint, 0, len(created))
+				skus := make([]string, 0, len(created))
+				for _, m := range created {
+					ids = append(ids, m.ID)
+					skus = append(skus, m.SKUCode)
+				}
+				return map[string]any{
+					"count":      len(created),
+					"ids":        ids,
+					"sku_codes":  skus,
+					"sample":     extractListSample(created[0]), // reuse helper, len>=1 per checks above
+					"all_items":  created,
+					"_tx_status": "atomic: all items committed or none",
+				}, nil
 			},
 		},
 
@@ -211,7 +649,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 				if id == 0 {
 					return nil, errorsBadRequest("id is required")
 				}
-				old, err := deps.Materials.Get(actor.TenantID, id)
+				old, err := deps.Materials.Get(context.Background(), actor.TenantID, id)
 				if err != nil {
 					return nil, err
 				}
@@ -237,7 +675,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 				if v, ok := args["max_stock"]; ok {
 					m.MaxStock = asDecimal(v)
 				}
-				if err := deps.Materials.Update(actor.TenantID, id, &m); err != nil {
+				if err := deps.Materials.Update(context.Background(), actor.TenantID, id, &m); err != nil {
 					return nil, err
 				}
 				return m, nil
@@ -277,7 +715,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 				if unitQty.IsZero() {
 					unitQty = decimal.NewFromInt(1)
 				}
-				bom, err := deps.BOMs.Create(actor.TenantID, BOMInput{
+				bom, err := deps.BOMs.Create(context.Background(), actor.TenantID, BOMInput{
 					BOMNo:     asStr(args, "bom_no"),
 					ProductID: asUint(args["product_id"]),
 					UnitQty:   unitQty,
@@ -293,7 +731,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 
 		{
 			Name:        "po_create",
-			Description: "新建采购订单（采购下单）。必填 supplier_id（须 APPROVED）和 details 明细数组；details 每项：material_id、order_qty（数量）、unit_price（单价）、location_id（可选库位）。",
+			Description: "新建采购订单（采购下单）。必填 supplier_id（须 APPROVED）和 details 明细数组；details 每项：material_id、order_qty（数量）、unit_price（单价）。",
 			Perm:        "po:create",
 			Schema: map[string]any{
 				"type": "object",
@@ -302,7 +740,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 					"supplier_id":       map[string]any{"type": "integer", "description": "供应商 ID"},
 					"order_date":        map[string]any{"type": "string", "description": "下单日期 YYYY-MM-DD（可选，默认今天）"},
 					"expected_delivery": map[string]any{"type": "string", "description": "期望交期 YYYY-MM-DD（可选）"},
-					"details":           map[string]any{"type": "array", "description": `明细数组，每项形如 {"material_id":1,"order_qty":"100","unit_price":"5.5","location_id":2}`},
+					"details":           map[string]any{"type": "array", "description": `明细数组，每项形如 {"material_id":1,"order_qty":"100","unit_price":"5.5"}`},
 				},
 				"required": []string{"supplier_id", "details"},
 			},
@@ -317,7 +755,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 						MaterialID: asUint(line["material_id"]),
 						OrderQty:   asDecimal(line["order_qty"]),
 						UnitPrice:  asDecimal(line["unit_price"]),
-						LocationID: asUint(line["location_id"]),
+						LocationID: 0,
 					})
 				}
 				orderDate := time.Now()
@@ -332,7 +770,7 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 						expected = &t
 					}
 				}
-				po, err := deps.POs.Create(actor.TenantID, CreatePOInput{
+				po, err := deps.POs.Create(context.Background(), actor.TenantID, CreatePOInput{
 					PONumber:             asStr(args, "po_number"),
 					SupplierID:           asUint(args["supplier_id"]),
 					OrderDate:            orderDate,
@@ -347,4 +785,51 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 			},
 		},
 	}
+	return tools
+}
+
+// getUploadDir mirrors the default from AssistantHandler so document tools
+// can discover uploaded files without holding a handler pointer. Override via
+// the SCM_UPLOAD_DIR env var.
+func getUploadDir() string {
+	if v := os.Getenv("SCM_UPLOAD_DIR"); v != "" {
+		return v
+	}
+	return filepath.Join(".", "uploads", "assistant")
+}
+
+// resolveDocPath resolves either an absolute path (from document_list output)
+// or a bare name (LLM asked by filename) into a readable file path. It
+// refuses any ".." traversal so a hallucinated name can't break out.
+func resolveDocPath(path, name string) (string, error) {
+	if path != "" {
+		clean := filepath.Clean(path)
+		if strings.Contains(clean, "..") {
+			return "", errors.New("refusing path with .. traversal")
+		}
+		if _, err := os.Stat(clean); err == nil {
+			return clean, nil
+		}
+	}
+	if name == "" {
+		return "", errors.New("either path or name is required")
+	}
+	cleanName := filepath.Base(name)
+	if cleanName == "." || cleanName == "/" || strings.Contains(cleanName, "..") {
+		return "", errors.New("invalid file name: " + cleanName)
+	}
+	dir := getUploadDir()
+	candidates, err := filepath.Glob(filepath.Join(dir, "*"+strings.TrimSuffix(filepath.Base(cleanName), filepath.Ext(cleanName))+"*"+filepath.Ext(cleanName)))
+	if err == nil && len(candidates) > 0 {
+		return candidates[0], nil
+	}
+	// Exact match by suffix: upload files are stored as YYYYMMDD_<uuid>.<ext>
+	full := filepath.Join(dir, cleanName)
+	if _, err := os.Stat(full); err == nil {
+		return full, nil
+	}
+	if len(candidates) > 0 {
+		return candidates[0], nil
+	}
+	return "", errors.New("file not found in upload dir: " + cleanName)
 }

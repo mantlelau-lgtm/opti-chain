@@ -61,6 +61,38 @@ func (r *AssistantMemoryRepo) DeleteByUser(ctx context.Context, t, userID uint) 
 	return r.db.DB.Where("tenant_id = ? AND user_id = ?", t, userID).Delete(&model.AssistantMemory{}).Error
 }
 
+// TrimOldTurnsKeepRecent keeps the most recent `keep` turns per (tenant,user)
+// and deletes the rest. It is called by memory.Service after every Store()
+// so short-term memory never grows unbounded. keep < 1 is treated as 100.
+func (r *AssistantMemoryRepo) TrimOldTurnsKeepRecent(ctx context.Context, t, userID uint, keep int) (deleted int64, err error) {
+	if keep < 1 {
+		keep = 100
+	}
+	// Use a subquery that respects SQLite/MySQL portability:
+	// find the cutoff id from the tail of the recent set, then delete
+	// everything with id <= cutoff for the same (tenant,user).
+	var cutoffID uint
+	row := r.db.DB.Raw(
+		`SELECT id FROM sys_assistant_memory
+		 WHERE tenant_id = ? AND user_id = ?
+		 ORDER BY id DESC LIMIT 1 OFFSET ?`, t, userID, keep-1,
+	)
+	if err = row.Scan(&cutoffID).Error; err != nil {
+		// No rows or offset past the end means nothing to trim.
+		if err == gorm.ErrRecordNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if cutoffID == 0 {
+		return 0, nil
+	}
+	db := r.db.DB.WithContext(ctx).
+		Where("tenant_id = ? AND user_id = ? AND id <= ?", t, userID, cutoffID).
+		Delete(&model.AssistantMemory{})
+	return db.RowsAffected, db.Error
+}
+
 // ---------------------------------------------------------------------------
 // MemoryNode
 // ---------------------------------------------------------------------------
@@ -152,6 +184,44 @@ func (r *MemoryEdgeRepo) TopEdges(ctx context.Context, t, userID uint, limit int
 
 func (r *MemoryEdgeRepo) DeleteByUser(ctx context.Context, t, userID uint) error {
 	return r.db.DB.Where("tenant_id = ? AND user_id = ?", t, userID).Delete(&model.MemoryEdge{}).Error
+}
+
+// ApplyDecay is called periodically by the memory decay loop.
+//   - olderThanDays: only touch edges that haven't been updated in this many days
+//   - factor: multiply weight by this (typically <1, e.g. 0.9 for -10%)
+//   - floor:  edges with a resulting weight strictly below this are DELETED
+//
+// Returns (decayedCount, purgedCount, error). The UPDATE + DELETE are wrapped
+// in a single transaction so the two counters stay consistent.
+func (r *MemoryEdgeRepo) ApplyDecay(ctx context.Context, olderThanDays int, factor, floor float64) (int64, int64, error) {
+	if olderThanDays <= 0 {
+		olderThanDays = 7
+	}
+	if factor <= 0 || factor >= 1 {
+		factor = 0.9
+	}
+	if floor < 0 {
+		floor = 0
+	}
+	cutoff := time.Now().AddDate(0, 0, -olderThanDays)
+	var decayed, purged int64
+	err := r.db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.MemoryEdge{}).
+			Where("last_updated <= ?", cutoff).
+			Update("weight", gorm.Expr("weight * ?", factor))
+		if res.Error != nil {
+			return res.Error
+		}
+		decayed = res.RowsAffected
+		res = tx.Where("weight < ? AND last_updated <= ?", floor, cutoff).
+			Delete(&model.MemoryEdge{})
+		if res.Error != nil {
+			return res.Error
+		}
+		purged = res.RowsAffected
+		return nil
+	})
+	return decayed, purged, err
 }
 
 // ---------------------------------------------------------------------------

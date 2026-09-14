@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func newTestApiKeyService(t *testing.T) *ApiKeyService {
 
 func TestApiKeyCreateAndVerify(t *testing.T) {
 	svc := newTestApiKeyService(t)
-	key, sk, err := svc.CreateKey(1, 1, "agent-1", "po:create,material:manage", nil)
+	key, sk, err := svc.CreateKey(context.Background(), 1, 1, "agent-1", "po:create,material:manage", nil)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
@@ -80,11 +81,11 @@ func TestApiKeyCreateAndVerify(t *testing.T) {
 
 func TestApiKeyDisable(t *testing.T) {
 	svc := newTestApiKeyService(t)
-	key, sk, err := svc.CreateKey(1, 1, "agent-2", "", nil)
+	key, sk, err := svc.CreateKey(context.Background(), 1, 1, "agent-2", "", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := svc.Disable(1, 1, key.ID); err != nil {
+	if err := svc.Disable(context.Background(), 1, 1, key.ID); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
@@ -97,7 +98,7 @@ func TestApiKeyDisable(t *testing.T) {
 
 func TestApiKeyEmptyPermsMeansAll(t *testing.T) {
 	svc := newTestApiKeyService(t)
-	key, sk, err := svc.CreateKey(1, 1, "agent-3", "", nil)
+	key, sk, err := svc.CreateKey(context.Background(), 1, 1, "agent-3", "", nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestApiKeyEmptyPermsMeansAll(t *testing.T) {
 func TestApiKeyExpiry(t *testing.T) {
 	svc := newTestApiKeyService(t)
 	exp := time.Now().Add(-time.Hour)
-	key, sk, err := svc.CreateKey(1, 1, "agent-4", "", &exp)
+	key, sk, err := svc.CreateKey(context.Background(), 1, 1, "agent-4", "", &exp)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

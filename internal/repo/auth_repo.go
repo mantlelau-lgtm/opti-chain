@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -15,7 +16,7 @@ func NewUserRepo(db *gormDB) *UserRepo {
 }
 
 // GetByTenantUsername looks a user up within a tenant; nil when absent.
-func (r *UserRepo) GetByTenantUsername(t uint, username string) (*model.User, error) {
+func (r *UserRepo) GetByTenantUsername(ctx context.Context, t uint, username string) (*model.User, error) {
 	var u model.User
 	if err := r.db.DB.Where("tenant_id = ? AND username = ?", t, username).First(&u).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -27,7 +28,7 @@ func (r *UserRepo) GetByTenantUsername(t uint, username string) (*model.User, er
 }
 
 // Get returns one user scoped to the tenant, nil when absent.
-func (r *UserRepo) Get(t, id uint) (*model.User, error) {
+func (r *UserRepo) Get(ctx context.Context, t, id uint) (*model.User, error) {
 	var u model.User
 	if err := r.db.DB.Where("tenant_id = ?", t).First(&u, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -44,18 +45,18 @@ func (r *UserRepo) Create(u *model.User) error {
 }
 
 // Update persists a user within the tenant.
-func (r *UserRepo) Update(t uint, u *model.User) error {
+func (r *UserRepo) Update(ctx context.Context, t uint, u *model.User) error {
 	u.TenantID = t
 	return r.db.DB.Save(u).Error
 }
 
 // Delete removes a user within the tenant.
-func (r *UserRepo) Delete(t, id uint) error {
+func (r *UserRepo) Delete(ctx context.Context, t, id uint) error {
 	return r.db.DB.Where("tenant_id = ?", t).Delete(&model.User{}, id).Error
 }
 
 // List returns paginated users of the tenant.
-func (r *UserRepo) List(t uint, f ListFilter, out *[]model.User, total *int64) error {
+func (r *UserRepo) List(ctx context.Context, t uint, f ListFilter, out *[]model.User, total *int64) error {
 	apply := func(q *gorm.DB) *gorm.DB {
 		q = q.Where("tenant_id = ?", t)
 		if f.Keyword != "" {

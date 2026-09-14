@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -15,7 +16,7 @@ func NewSupplierMaterialRepo(db *gormDB) *SupplierMaterialRepo {
 
 // List returns relationships filtered by supplier and/or material (both
 // optional; at least one should be given by the caller).
-func (r *SupplierMaterialRepo) List(t, supplierID, materialID uint, out *[]model.SupplierMaterial) error {
+func (r *SupplierMaterialRepo) List(ctx context.Context, t, supplierID, materialID uint, out *[]model.SupplierMaterial) error {
 	q := r.db.DB.Where("tenant_id = ?", t)
 	if supplierID != 0 {
 		q = q.Where("supplier_id = ?", supplierID)
@@ -28,7 +29,7 @@ func (r *SupplierMaterialRepo) List(t, supplierID, materialID uint, out *[]model
 
 // GetByPair finds the relationship for a (supplier, material) pair, nil if
 // absent.
-func (r *SupplierMaterialRepo) GetByPair(t, supplierID, materialID uint) (*model.SupplierMaterial, error) {
+func (r *SupplierMaterialRepo) GetByPair(ctx context.Context, t, supplierID, materialID uint) (*model.SupplierMaterial, error) {
 	var m model.SupplierMaterial
 	err := r.db.DB.Where("tenant_id = ? AND supplier_id = ? AND material_id = ?", t, supplierID, materialID).
 		First(&m).Error

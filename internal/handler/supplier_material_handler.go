@@ -30,7 +30,7 @@ func (h *SupplierMaterialHandler) List(c *gin.Context) {
 	if v := c.Query("material_id"); v != "" {
 		materialID = parseUint(v)
 	}
-	list, err := h.svc.List(tenantOf(c), supplierID, materialID)
+	list, err := h.svc.List(c.Request.Context(), tenantOf(c), supplierID, materialID)
 	if mapErr(c, err) {
 		return
 	}
@@ -43,7 +43,7 @@ func (h *SupplierMaterialHandler) Bind(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	m, err := h.svc.Bind(tenantOf(c), in)
+	m, err := h.svc.Bind(c.Request.Context(), tenantOf(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -56,7 +56,7 @@ func (h *SupplierMaterialHandler) Update(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	m, err := h.svc.Update(tenantOf(c), idParam(c), in)
+	m, err := h.svc.Update(c.Request.Context(), tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -64,7 +64,7 @@ func (h *SupplierMaterialHandler) Update(c *gin.Context) {
 }
 
 func (h *SupplierMaterialHandler) Unbind(c *gin.Context) {
-	if mapErr(c, h.svc.Unbind(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.svc.Unbind(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

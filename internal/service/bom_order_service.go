@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -71,12 +72,12 @@ type BOMOrderLine struct {
 
 // Preview expands the products' default BOMs (aggregating shared materials),
 // resolves a supplier per material and groups the result by supplier. No writes.
-func (s *BOMOrderService) Preview(t uint, items []BOMOrderLine) (*BOMOrderPlan, error) {
+func (s *BOMOrderService) Preview(ctx context.Context, t uint, items []BOMOrderLine) (*BOMOrderPlan, error) {
 	return s.resolve(t, items)
 }
 
 // Create re-resolves the plan and creates one DRAFT PO per supplier.
-func (s *BOMOrderService) Create(t uint, items []BOMOrderLine, orderDate time.Time) ([]*model.PurchaseOrder, error) {
+func (s *BOMOrderService) Create(ctx context.Context, t uint, items []BOMOrderLine, orderDate time.Time) ([]*model.PurchaseOrder, error) {
 	plan, err := s.resolve(t, items)
 	if err != nil {
 		return nil, err
@@ -98,7 +99,7 @@ func (s *BOMOrderService) Create(t uint, items []BOMOrderLine, orderDate time.Ti
 				UnitPrice:  it.UnitPrice,
 			})
 		}
-		po, err := s.posvc.Create(t, CreatePOInput{
+		po, err := s.posvc.Create(context.Background(), t, CreatePOInput{
 			PONumber:   fmt.Sprintf("BOM-%s-%d", ts, i+1),
 			SupplierID: g.SupplierID,
 			OrderDate:  orderDate,
@@ -122,7 +123,7 @@ func (s *BOMOrderService) resolve(t uint, items []BOMOrderLine) (*BOMOrderPlan, 
 		if it.Qty.LessThanOrEqual(decimal.Zero) {
 			return nil, errorsBadRequest("product qty must be positive")
 		}
-		bom, err := s.bom.DefaultByProduct(t, it.ProductID)
+		bom, err := s.bom.DefaultByProduct(context.Background(), t, it.ProductID)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +151,7 @@ func (s *BOMOrderService) resolve(t uint, items []BOMOrderLine) (*BOMOrderPlan, 
 	for _, matID := range matIDs {
 		qty := matQty[matID]
 		name := fmt.Sprint(matID)
-		if mat, _ := s.materials.Get(t, matID); mat != nil {
+		if mat, _ := s.materials.Get(context.Background(), t, matID); mat != nil {
 			name = mat.Name
 		}
 		rel, err := s.pickSupplier(t, matID)
@@ -162,7 +163,7 @@ func (s *BOMOrderService) resolve(t uint, items []BOMOrderLine) (*BOMOrderPlan, 
 			continue
 		}
 		sname := fmt.Sprint(rel.SupplierID)
-		if supplier, _ := s.suppliers.Get(t, rel.SupplierID); supplier != nil {
+		if supplier, _ := s.suppliers.Get(context.Background(), t, rel.SupplierID); supplier != nil {
 			sname = supplier.Name
 		}
 		g, ok := groups[rel.SupplierID]
@@ -188,7 +189,7 @@ func (s *BOMOrderService) resolve(t uint, items []BOMOrderLine) (*BOMOrderPlan, 
 // supplier-material relationship for a material; nil when none qualifies.
 func (s *BOMOrderService) pickSupplier(t, materialID uint) (*model.SupplierMaterial, error) {
 	var rels []model.SupplierMaterial
-	if err := s.supMat.List(t, 0, materialID, &rels); err != nil {
+	if err := s.supMat.List(context.Background(), t, 0, materialID, &rels); err != nil {
 		return nil, err
 	}
 	var best *model.SupplierMaterial
@@ -197,7 +198,7 @@ func (s *BOMOrderService) pickSupplier(t, materialID uint) (*model.SupplierMater
 		if r.Status != 1 {
 			continue
 		}
-		supplier, err := s.suppliers.Get(t, r.SupplierID)
+		supplier, err := s.suppliers.Get(context.Background(), t, r.SupplierID)
 		if err != nil {
 			return nil, err
 		}

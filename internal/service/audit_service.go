@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -51,15 +52,15 @@ func (s *AuditService) Log(a *authx.Actor, method, path string) {
 }
 
 // IsPlatform reports whether the tenant id is the platform tenant.
-func (s *AuditService) IsPlatform(t uint) bool {
+func (s *AuditService) IsPlatform(ctx context.Context, t uint) bool {
 	tn, err := s.tenants.Get(t)
 	return err == nil && tn != nil && tn.Code == "platform"
 }
 
 // Search lists audit logs. For a business tenant the scope is forced to that
 // tenant; for the platform tenant it may span all tenants (via TenantID).
-func (s *AuditService) Search(t uint, in PageInput, af repository.AuditFilter) ([]model.OperationLog, int64, error) {
-	if !s.IsPlatform(t) {
+func (s *AuditService) Search(ctx context.Context, t uint, in PageInput, af repository.AuditFilter) ([]model.OperationLog, int64, error) {
+	if !s.IsPlatform(ctx, t) {
 		af.TenantID = t
 	}
 	var (

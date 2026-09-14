@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -40,7 +41,7 @@ func (s *AuthService) Login(username, password, tenantCode string) (string, *mod
 	if tenant == nil || tenant.Status != model.TenantActive {
 		return "", nil, nil, errf(ErrUnauthorized, "invalid tenant or tenant suspended")
 	}
-	u, err := s.users.GetByTenantUsername(tenant.ID, username)
+	u, err := s.users.GetByTenantUsername(context.Background(), tenant.ID, username)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -78,7 +79,7 @@ func (s *AuthService) ChangePassword(actor *authx.Actor, oldPassword, newPasswor
 	if len(newPassword) < 6 {
 		return errorsBadRequest("new password must be at least 6 characters")
 	}
-	u, err := s.users.Get(actor.TenantID, actor.UserID)
+	u, err := s.users.Get(context.Background(), actor.TenantID, actor.UserID)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (s *AuthService) ChangePassword(actor *authx.Actor, oldPassword, newPasswor
 		return err
 	}
 	u.PasswordHash = string(hash)
-	return s.users.Update(actor.TenantID, u)
+	return s.users.Update(context.Background(), actor.TenantID, u)
 }
 
 // ParseToken validates a bearer token and extracts the actor.

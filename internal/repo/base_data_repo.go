@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"gorm.io/gorm"
-
 	"scm/internal/model"
 )
 
@@ -40,23 +38,4 @@ func NewWarehouseRepo(db *gormDB) *WarehouseRepo {
 
 func (r *WarehouseRepo) List(f ListFilter, out *[]model.Warehouse, total *int64) error {
 	return r.listT(f, keywordLike(f, "warehouse_code", "name"), out, total)
-}
-
-// ---- Location ----
-
-type LocationRepo struct{ *tenantRepo[model.Location] }
-
-func NewLocationRepo(db *gormDB) *LocationRepo {
-	return &LocationRepo{tenantRepo: newTenantRepo[model.Location](db)}
-}
-
-func (r *LocationRepo) List(f ListFilter, out *[]model.Location, total *int64) error {
-	apply := func(q *gorm.DB) *gorm.DB {
-		if f.Keyword != "" {
-			like := "%" + f.Keyword + "%"
-			q = q.Where("location_code LIKE ? OR name LIKE ?", like, like)
-		}
-		return q
-	}
-	return r.listT(f, apply, out, total)
 }

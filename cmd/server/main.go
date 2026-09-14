@@ -5,6 +5,10 @@
 package main
 
 import (
+	"context"
+	"os"
+	"time"
+
 	"go.uber.org/zap"
 
 	"scm/internal/config"
@@ -12,10 +16,10 @@ import (
 	"scm/internal/handler"
 	"scm/internal/memory"
 	"scm/internal/middleware"
-	"scm/pkg/llmclient"
-	"scm/internal/repo"
+	repository "scm/internal/repo"
 	"scm/internal/router"
 	"scm/internal/service"
+	"scm/pkg/llmclient"
 )
 
 func main() {
@@ -36,7 +40,6 @@ func main() {
 	materialRepo := repository.NewMaterialRepo(gdb)
 	supplierRepo := repository.NewSupplierRepo(gdb)
 	warehouseRepo := repository.NewWarehouseRepo(gdb)
-	locationRepo := repository.NewLocationRepo(gdb)
 	poRepo := repository.NewPurchaseOrderRepo(gdb)
 	receiptRepo := repository.NewPurchaseReceiptRepo(gdb)
 	stockRepo := repository.NewStockRepo(gdb)
@@ -59,6 +62,7 @@ func main() {
 	dataSourceRepo := repository.NewDataSourceRepo(gdb)
 	approvalGroupRepo := repository.NewApprovalGroupRepo(gdb)
 	approvalTaskRepo := repository.NewApprovalTaskRepo(gdb)
+	logisticsRepo := repository.NewLogisticsRepo(gdb)
 	apiKeyRepo := repository.NewApiKeyRepo(gdb)
 	memRepo := repository.NewAssistantMemoryRepo(gdb)
 	memNodeRepo := repository.NewMemoryNodeRepo(gdb)
@@ -81,6 +85,9 @@ func main() {
 	if err := service.EnsureApprovalCatalog(db.DB); err != nil {
 		zap.L().Fatal("seed approval catalog", zap.Error(err))
 	}
+	if err := service.EnsureLogisticsCatalog(db.DB); err != nil {
+		zap.L().Fatal("seed logistics catalog", zap.Error(err))
+	}
 	rbacSvc := service.NewRBACService(service.RBACDeps{
 		Tenants: tenantRepo, Users: userRepo, Roles: roleRepo,
 		Modules: moduleRepo, Perms: permRepo, UserRoles: userRoleRepo, DB: db.DB,
@@ -92,7 +99,6 @@ func main() {
 	materialSvc := service.NewMaterialService(materialRepo)
 	supplierSvc := service.NewSupplierService(supplierRepo)
 	warehouseSvc := service.NewWarehouseService(warehouseRepo)
-	locationSvc := service.NewLocationService(locationRepo)
 	poSvc := service.NewPurchaseOrderService(poRepo, supplierRepo)
 	invSvc := service.NewInventoryService(service.InventoryDeps{
 		Stock:  stockRepo,
@@ -124,6 +130,10 @@ func main() {
 	supplierMaterialSvc := service.NewSupplierMaterialService(supplierMaterialRepo, supplierRepo, materialRepo)
 	auditSvc := service.NewAuditService(operationLogRepo, tenantRepo)
 	storageSvc := service.NewStorageService(db.DB, dataSourceRepo, cfg.DB.Driver, cfg.DB.DSN)
+	logisticsSvc := service.NewLogisticsService(logisticsRepo, service.LogisticsConfig{
+		PartnerID: getEnv("SF_PARTNER_ID", ""),
+		Checkword: getEnv("SF_CHECKWORD", ""),
+	})
 	approvalSvc := service.NewApprovalService(service.ApprovalDeps{
 		Groups: approvalGroupRepo,
 		Tasks:  approvalTaskRepo,
@@ -151,7 +161,18 @@ func main() {
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo, cfg.Auth.JWTSecret)
 	memorySvc := memory.NewService(memRepo, memNodeRepo, memEdgeRepo, memProfRepo,
 		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
-		memory.Config{WindowSize: 10, ConsolidateInterval: 5})
+		memory.Config{
+			WindowSize:          10,
+			ConsolidateInterval: 5,
+			ShortTermKeepTurns:  100, // per-user turn cap; old turns auto-trimmed
+			Decay: memory.DecayConfig{
+				Interval:      24 * time.Hour, // 0 = default (24h); negative = disable
+				OlderThanDays: 7,              // edges not touched for ≥1 week decay
+				Factor:        0.9,            // -10% per run
+				Floor:         0.05,           // below this → PURGED (natural forgetting)
+			},
+		})
+	docSvc := service.NewDocumentService()
 	assistantSvc := service.NewAssistantService(
 		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
 		service.AssistantDeps{
@@ -164,13 +185,17 @@ func main() {
 			RBAC:      rbacSvc,
 			Audit:     auditSvc,
 			Memory:    memorySvc,
+			SOs:       soSvc,
+			Customers: customerSvc,
+			Logistics: logisticsSvc,
+			Docs:      docSvc,
 		},
 	)
 
 	// 4) Handlers (HTTP translation).
 	h := &router.Handlers{
 		RBAC:      handler.NewRBACHandler(rbacSvc, authSvc),
-		Base:      handler.NewBaseDataHandler(materialSvc, supplierSvc, warehouseSvc, locationSvc),
+		Base:      handler.NewBaseDataHandler(materialSvc, supplierSvc, warehouseSvc),
 		PO:        handler.NewPurchaseOrderHandler(poSvc),
 		Receiving: handler.NewReceivingHandler(receivingSvc),
 		Sales:     handler.NewSalesHandler(customerSvc, soSvc),
@@ -181,8 +206,9 @@ func main() {
 		SupMat:    handler.NewSupplierMaterialHandler(supplierMaterialSvc),
 		BOMOrder:  handler.NewBOMOrderHandler(bomOrderSvc),
 		AuditLog:  handler.NewOperationLogHandler(auditSvc),
-		Storage:   handler.NewStorageHandler(storageSvc, rbacSvc.IsPlatform),
+		Storage:   handler.NewStorageHandler(storageSvc, func(t uint) bool { return rbacSvc.IsPlatform(context.Background(), t) }),
 		Approval:  handler.NewApprovalHandler(approvalSvc),
+		Logistics: handler.NewLogisticsHandler(logisticsSvc),
 		ApiKey:    handler.NewApiKeyHandler(apiKeySvc, rbacSvc),
 		Assistant: handler.NewAssistantHandler(assistantSvc, memorySvc),
 	}
@@ -203,7 +229,17 @@ func main() {
 		zap.String("driver", cfg.DB.Driver),
 		zap.Bool("auth", cfg.Auth.Enabled),
 	)
+	// Start the background long-term memory decay loop once at boot.
+	// Runs once immediately then every Decay.Interval on a goroutine;
+	// cancels automatically on server shutdown (context ties to process).
+	memorySvc.StartDecayLoop(context.Background())
 	if err := engine.Run(cfg.Server.Addr); err != nil {
 		zap.L().Fatal("server run", zap.Error(err))
 	}
+}
+func getEnv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -17,7 +18,7 @@ func NewApprovalGroupRepo(db *gormDB) *ApprovalGroupRepo {
 	return &ApprovalGroupRepo{tenantRepo: newTenantRepo[model.ApprovalGroup](db), db: db}
 }
 
-func (r *ApprovalGroupRepo) GetWithMembers(t, id uint) (*model.ApprovalGroup, error) {
+func (r *ApprovalGroupRepo) GetWithMembers(ctx context.Context, t, id uint) (*model.ApprovalGroup, error) {
 	var g model.ApprovalGroup
 	if err := r.db.DB.Preload("Members").Where("tenant_id = ?", t).First(&g, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -29,7 +30,7 @@ func (r *ApprovalGroupRepo) GetWithMembers(t, id uint) (*model.ApprovalGroup, er
 }
 
 // ListByType returns groups for an order type, latest first.
-func (r *ApprovalGroupRepo) ListByType(t uint, orderType string) ([]model.ApprovalGroup, error) {
+func (r *ApprovalGroupRepo) ListByType(ctx context.Context, t uint, orderType string) ([]model.ApprovalGroup, error) {
 	var out []model.ApprovalGroup
 	err := r.db.DB.Preload("Members").
 		Where("tenant_id = ? AND order_type = ?", t, orderType).
@@ -39,7 +40,7 @@ func (r *ApprovalGroupRepo) ListByType(t uint, orderType string) ([]model.Approv
 }
 
 // CreateWithMembers persists a group and its members in one transaction.
-func (r *ApprovalGroupRepo) CreateWithMembers(t uint, g *model.ApprovalGroup) error {
+func (r *ApprovalGroupRepo) CreateWithMembers(ctx context.Context, t uint, g *model.ApprovalGroup) error {
 	g.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(g).Error; err != nil {
@@ -56,7 +57,7 @@ func (r *ApprovalGroupRepo) CreateWithMembers(t uint, g *model.ApprovalGroup) er
 }
 
 // UpdateWithMembers replaces a group's members.
-func (r *ApprovalGroupRepo) UpdateWithMembers(t uint, g *model.ApprovalGroup) error {
+func (r *ApprovalGroupRepo) UpdateWithMembers(ctx context.Context, t uint, g *model.ApprovalGroup) error {
 	g.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("group_id = ?", g.ID).Delete(&model.ApprovalGroupMember{}).Error; err != nil {
@@ -77,7 +78,7 @@ func (r *ApprovalGroupRepo) UpdateWithMembers(t uint, g *model.ApprovalGroup) er
 	})
 }
 
-func (r *ApprovalGroupRepo) List(t uint, f ListFilter, out *[]model.ApprovalGroup, total *int64) error {
+func (r *ApprovalGroupRepo) List(ctx context.Context, t uint, f ListFilter, out *[]model.ApprovalGroup, total *int64) error {
 	return r.listT(f, func(q *gorm.DB) *gorm.DB { return q.Preload("Members").Order("id") }, out, total)
 }
 
@@ -91,7 +92,7 @@ func NewApprovalTaskRepo(db *gormDB) *ApprovalTaskRepo {
 	return &ApprovalTaskRepo{tenantRepo: newTenantRepo[model.ApprovalTask](db), db: db}
 }
 
-func (r *ApprovalTaskRepo) GetWithMembers(t, id uint) (*model.ApprovalTask, error) {
+func (r *ApprovalTaskRepo) GetWithMembers(ctx context.Context, t, id uint) (*model.ApprovalTask, error) {
 	var task model.ApprovalTask
 	if err := r.db.DB.Preload("Members").Where("tenant_id = ?", t).First(&task, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -103,7 +104,7 @@ func (r *ApprovalTaskRepo) GetWithMembers(t, id uint) (*model.ApprovalTask, erro
 }
 
 // CreateWithMembers persists a task and its member records in one transaction.
-func (r *ApprovalTaskRepo) CreateWithMembers(t uint, task *model.ApprovalTask) error {
+func (r *ApprovalTaskRepo) CreateWithMembers(ctx context.Context, t uint, task *model.ApprovalTask) error {
 	task.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(task).Error; err != nil {
@@ -120,7 +121,7 @@ func (r *ApprovalTaskRepo) CreateWithMembers(t uint, task *model.ApprovalTask) e
 }
 
 // PendingForUser lists tasks where the user has a PENDING member record.
-func (r *ApprovalTaskRepo) PendingForUser(t, userID uint, out *[]model.ApprovalTask) error {
+func (r *ApprovalTaskRepo) PendingForUser(ctx context.Context, t, userID uint, out *[]model.ApprovalTask) error {
 	return r.db.DB.Preload("Members").
 		Where("tenant_id = ? AND id IN (?)",
 			t,
@@ -131,7 +132,7 @@ func (r *ApprovalTaskRepo) PendingForUser(t, userID uint, out *[]model.ApprovalT
 }
 
 // ProcessedForUser lists tasks the user has acted on (approved/rejected).
-func (r *ApprovalTaskRepo) ProcessedForUser(t, userID uint, out *[]model.ApprovalTask) error {
+func (r *ApprovalTaskRepo) ProcessedForUser(ctx context.Context, t, userID uint, out *[]model.ApprovalTask) error {
 	return r.db.DB.Preload("Members").
 		Where("tenant_id = ? AND id IN (?)",
 			t,
@@ -142,7 +143,7 @@ func (r *ApprovalTaskRepo) ProcessedForUser(t, userID uint, out *[]model.Approva
 }
 
 // SubmittedBy lists tasks submitted by a user.
-func (r *ApprovalTaskRepo) SubmittedBy(t, userID uint, out *[]model.ApprovalTask) error {
+func (r *ApprovalTaskRepo) SubmittedBy(ctx context.Context, t, userID uint, out *[]model.ApprovalTask) error {
 	return r.db.DB.Preload("Members").
 		Where("tenant_id = ? AND submitter_id = ?", t, userID).
 		Order("id DESC").Find(out).Error

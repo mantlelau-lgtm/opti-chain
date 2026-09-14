@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -27,7 +28,7 @@ func (r *ApiKeyRepo) GetByAK(ak string) (*model.ApiKey, error) {
 }
 
 // Get returns one key scoped to the tenant AND its owner user, nil when absent.
-func (r *ApiKeyRepo) Get(t, userID, id uint) (*model.ApiKey, error) {
+func (r *ApiKeyRepo) Get(ctx context.Context, t, userID, id uint) (*model.ApiKey, error) {
 	var k model.ApiKey
 	if err := r.db.DB.Where("tenant_id = ? AND user_id = ?", t, userID).First(&k, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -44,18 +45,18 @@ func (r *ApiKeyRepo) Create(k *model.ApiKey) error {
 }
 
 // Update persists a key within the tenant.
-func (r *ApiKeyRepo) Update(t uint, k *model.ApiKey) error {
+func (r *ApiKeyRepo) Update(ctx context.Context, t uint, k *model.ApiKey) error {
 	k.TenantID = t
 	return r.db.DB.Save(k).Error
 }
 
 // Delete removes a key owned by the given user within the tenant.
-func (r *ApiKeyRepo) Delete(t, userID, id uint) error {
+func (r *ApiKeyRepo) Delete(ctx context.Context, t, userID, id uint) error {
 	return r.db.DB.Where("tenant_id = ? AND user_id = ?", t, userID).Delete(&model.ApiKey{}, id).Error
 }
 
 // List returns paginated keys owned by the given user.
-func (r *ApiKeyRepo) List(t, userID uint, f ListFilter, out *[]model.ApiKey, total *int64) error {
+func (r *ApiKeyRepo) List(ctx context.Context, t, userID uint, f ListFilter, out *[]model.ApiKey, total *int64) error {
 	apply := func(q *gorm.DB) *gorm.DB {
 		q = q.Where("tenant_id = ? AND user_id = ?", t, userID)
 		if f.Keyword != "" {

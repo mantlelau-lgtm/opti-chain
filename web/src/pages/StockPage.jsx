@@ -46,7 +46,6 @@ export default function StockPage() {
   const cols = [
      { title: 'ID', dataIndex: 'id', width: 60 },
      { title: '仓库', dataIndex: 'warehouse_id', render: (v) => whName(v) },
-     { title: '库位', dataIndex: 'location_id', render: (v) => v || '-' },
      { title: '物料', dataIndex: 'material_id', render: (v) => matName(v) },
      { title: '库存量', dataIndex: 'quantity' },
      { title: '锁定量', dataIndex: 'locked_quantity' },

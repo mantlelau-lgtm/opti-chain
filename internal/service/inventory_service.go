@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
@@ -43,7 +44,7 @@ func NewStockService(repo *repository.StockRepo) *StockService {
 	return &StockService{repo: repo}
 }
 
-func (s *StockService) List(t uint, in PageInput) ([]model.Stock, int64, error) {
+func (s *StockService) List(ctx context.Context, t uint, in PageInput) ([]model.Stock, int64, error) {
 	var (
 		out   []model.Stock
 		total int64
@@ -56,8 +57,8 @@ func (s *StockService) List(t uint, in PageInput) ([]model.Stock, int64, error) 
 }
 
 // GetByComposite returns the on-hand stock for a wh/loc/material tuple.
-func (s *StockService) GetByComposite(t, wh, loc, mat uint) (*model.Stock, error) {
-	return s.repo.GetByComposite(t, wh, loc, mat)
+func (s *StockService) GetByComposite(ctx context.Context, t, wh, loc, mat uint) (*model.Stock, error) {
+	return s.repo.GetByComposite(ctx, t, wh, loc, mat)
 }
 
 // MoveInput describes a single inventory movement (in or out).
@@ -92,7 +93,7 @@ func (s *InventoryService) movement(t uint, in MoveInput) (*model.InventoryOrder
 	if err != nil {
 		return nil, err
 	}
-	return s.orders.GetWithDetails(t, created.ID)
+	return s.orders.GetWithDetails(context.Background(), t, created.ID)
 }
 
 // applyMovementInTx executes a movement inside a caller-owned transaction: it
@@ -173,12 +174,12 @@ func (s *InventoryService) applyMovementInTx(tx *gorm.DB, t uint, in MoveInput) 
 }
 
 // MoveIn handles purchase-in (and transfer-in) movements.
-func (s *InventoryService) MoveIn(t uint, in MoveInput) (*model.InventoryOrder, error) {
+func (s *InventoryService) MoveIn(ctx context.Context, t uint, in MoveInput) (*model.InventoryOrder, error) {
 	return s.movement(t, in)
 }
 
 // MoveOut handles sale-out movements (oversell guarded).
-func (s *InventoryService) MoveOut(t uint, in MoveInput) (*model.InventoryOrder, error) {
+func (s *InventoryService) MoveOut(ctx context.Context, t uint, in MoveInput) (*model.InventoryOrder, error) {
 	return s.movement(t, in)
 }
 
@@ -203,7 +204,7 @@ func logAction(orderType string) string {
 }
 
 // ListOrders returns paginated inventory orders within the tenant.
-func (s *InventoryService) ListOrders(t uint, in PageInput) ([]model.InventoryOrder, int64, error) {
+func (s *InventoryService) ListOrders(ctx context.Context, t uint, in PageInput) ([]model.InventoryOrder, int64, error) {
 	var (
 		out   []model.InventoryOrder
 		total int64
@@ -216,17 +217,17 @@ func (s *InventoryService) ListOrders(t uint, in PageInput) ([]model.InventoryOr
 }
 
 // GetOrder loads a movement with details.
-func (s *InventoryService) GetOrder(t, id uint) (*model.InventoryOrder, error) {
-	return s.orders.GetWithDetails(t, id)
+func (s *InventoryService) GetOrder(ctx context.Context, t, id uint) (*model.InventoryOrder, error) {
+	return s.orders.GetWithDetails(context.Background(), t, id)
 }
 
 // DeleteOrder removes a movement record.
-func (s *InventoryService) DeleteOrder(t, id uint) error {
-	return s.orders.Delete(t, id)
+func (s *InventoryService) DeleteOrder(ctx context.Context, t, id uint) error {
+	return s.orders.Delete(context.Background(), t, id)
 }
 
 // ListLogs returns the audit trail within the tenant.
-func (s *InventoryService) ListLogs(t uint, in PageInput) ([]model.TransactionLog, int64, error) {
+func (s *InventoryService) ListLogs(ctx context.Context, t uint, in PageInput) ([]model.TransactionLog, int64, error) {
 	var (
 		out   []model.TransactionLog
 		total int64

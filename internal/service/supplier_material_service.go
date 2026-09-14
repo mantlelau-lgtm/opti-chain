@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"github.com/shopspring/decimal"
 
 	"scm/internal/model"
@@ -29,9 +30,9 @@ type BindInput struct {
 }
 
 // List returns relationships for a supplier and/or a material.
-func (s *SupplierMaterialService) List(t, supplierID, materialID uint) ([]model.SupplierMaterial, error) {
+func (s *SupplierMaterialService) List(ctx context.Context, t, supplierID, materialID uint) ([]model.SupplierMaterial, error) {
 	var out []model.SupplierMaterial
-	if err := s.repo.List(t, supplierID, materialID, &out); err != nil {
+	if err := s.repo.List(ctx, t, supplierID, materialID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -39,21 +40,21 @@ func (s *SupplierMaterialService) List(t, supplierID, materialID uint) ([]model.
 
 // Bind creates or updates (upsert) the relationship for a supplier+material
 // pair, so "binding" again just refreshes the price/lead time.
-func (s *SupplierMaterialService) Bind(t uint, in BindInput) (*model.SupplierMaterial, error) {
+func (s *SupplierMaterialService) Bind(ctx context.Context, t uint, in BindInput) (*model.SupplierMaterial, error) {
 	if in.SupplierID == 0 || in.MaterialID == 0 {
 		return nil, errorsBadRequest("supplier_id and material_id are required")
 	}
-	if supplier, _ := s.suppliers.Get(t, in.SupplierID); supplier == nil {
+	if supplier, _ := s.suppliers.Get(context.Background(), t, in.SupplierID); supplier == nil {
 		return nil, errNotFound(in.SupplierID)
 	}
-	if material, _ := s.materials.Get(t, in.MaterialID); material == nil {
+	if material, _ := s.materials.Get(ctx, t, in.MaterialID); material == nil {
 		return nil, errNotFound(in.MaterialID)
 	}
 	price, err := decimal.NewFromString(in.UnitPrice)
 	if err != nil || price.IsNegative() {
 		return nil, errorsBadRequest("unit_price must be a non-negative number")
 	}
-	existing, err := s.repo.GetByPair(t, in.SupplierID, in.MaterialID)
+	existing, err := s.repo.GetByPair(ctx, t, in.SupplierID, in.MaterialID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func (s *SupplierMaterialService) Bind(t uint, in BindInput) (*model.SupplierMat
 		existing.LeadTimeDays = in.LeadTimeDays
 		existing.IsPreferred = in.IsPreferred
 		existing.Status = 1
-		if err := s.repo.Update(t, existing); err != nil {
+		if err := s.repo.Update(ctx, t, existing); err != nil {
 			return nil, err
 		}
 		return existing, nil
@@ -75,15 +76,15 @@ func (s *SupplierMaterialService) Bind(t uint, in BindInput) (*model.SupplierMat
 		IsPreferred:  in.IsPreferred,
 		Status:       1,
 	}
-	if err := s.repo.Create(t, m); err != nil {
+	if err := s.repo.Create(ctx, t, m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
 // Update edits an existing relationship line.
-func (s *SupplierMaterialService) Update(t, id uint, in BindInput) (*model.SupplierMaterial, error) {
-	m, err := s.repo.Get(t, id)
+func (s *SupplierMaterialService) Update(ctx context.Context, t, id uint, in BindInput) (*model.SupplierMaterial, error) {
+	m, err := s.repo.Get(ctx, t, id)
 	if m == nil {
 		return nil, errNotFound(id)
 	}
@@ -97,13 +98,13 @@ func (s *SupplierMaterialService) Update(t, id uint, in BindInput) (*model.Suppl
 	m.UnitPrice = price
 	m.LeadTimeDays = in.LeadTimeDays
 	m.IsPreferred = in.IsPreferred
-	if err := s.repo.Update(t, m); err != nil {
+	if err := s.repo.Update(ctx, t, m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
 // Unbind removes a relationship.
-func (s *SupplierMaterialService) Unbind(t, id uint) error {
-	return s.repo.Delete(t, id)
+func (s *SupplierMaterialService) Unbind(ctx context.Context, t, id uint) error {
+	return s.repo.Delete(ctx, t, id)
 }

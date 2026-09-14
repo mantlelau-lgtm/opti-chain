@@ -23,7 +23,6 @@ type moveRequest struct {
 	WarehouseID    uint   `json:"warehouse_id"`
 	Details        []struct {
 		MaterialID uint   `json:"material_id"`
-		LocationID uint   `json:"location_id"`
 		Qty        string `json:"qty"`
 	} `json:"details"`
 }
@@ -40,7 +39,7 @@ func toMove(in moveRequest) service.MoveInput {
 		q, _ := decimal.NewFromString(d.Qty)
 		mi.Details = append(mi.Details, service.MoveDetailInput{
 			MaterialID: d.MaterialID,
-			LocationID: d.LocationID,
+			LocationID: 0,
 			Qty:        q,
 		})
 	}
@@ -54,7 +53,7 @@ func (h *InventoryHandler) MoveIn(c *gin.Context) {
 		return
 	}
 	req.OrderType = "PURCHASE_IN"
-	o, err := h.svc.MoveIn(tenantOf(c), toMove(req))
+	o, err := h.svc.MoveIn(c.Request.Context(), tenantOf(c), toMove(req))
 	if mapErr(c, err) {
 		return
 	}
@@ -68,7 +67,7 @@ func (h *InventoryHandler) MoveOut(c *gin.Context) {
 		return
 	}
 	req.OrderType = "SALE_OUT"
-	o, err := h.svc.MoveOut(tenantOf(c), toMove(req))
+	o, err := h.svc.MoveOut(c.Request.Context(), tenantOf(c), toMove(req))
 	if mapErr(c, err) {
 		return
 	}
@@ -76,7 +75,7 @@ func (h *InventoryHandler) MoveOut(c *gin.Context) {
 }
 
 func (h *InventoryHandler) ListOrders(c *gin.Context) {
-	list, total, err := h.svc.ListOrders(tenantOf(c), parsePage(c))
+	list, total, err := h.svc.ListOrders(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -84,7 +83,7 @@ func (h *InventoryHandler) ListOrders(c *gin.Context) {
 }
 
 func (h *InventoryHandler) GetOrder(c *gin.Context) {
-	o, err := h.svc.GetOrder(tenantOf(c), idParam(c))
+	o, err := h.svc.GetOrder(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -92,14 +91,14 @@ func (h *InventoryHandler) GetOrder(c *gin.Context) {
 }
 
 func (h *InventoryHandler) DeleteOrder(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteOrder(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.svc.DeleteOrder(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
 }
 
 func (h *InventoryHandler) ListLogs(c *gin.Context) {
-	list, total, err := h.svc.ListLogs(tenantOf(c), parsePage(c))
+	list, total, err := h.svc.ListLogs(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}

@@ -77,7 +77,7 @@ func Load() *Config {
 		},
 		LLM: LLM{
 			URL:   getEnv("SCM_LLM_URL", "http://127.0.0.1:8080"),
-			Model: getEnv("SCM_LLM_MODEL", "qwen3-coder-flash"),
+			Model: getEnv("SCM_LLM_MODEL", "qwen3.8:27b-mlx"),
 			Key:   getEnv("SCM_LLM_KEY", ""),
 		},
 	}

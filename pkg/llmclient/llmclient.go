@@ -1,6 +1,3 @@
-// Package llmclient is a minimal OpenAI-compatible chat client (function
-// calling) targeting the local LLM gateway. It carries just enough surface to
-// run an agent loop: messages with tool calls and a `tools` schema.
 package llmclient
 
 import (
@@ -14,17 +11,46 @@ import (
 	"time"
 )
 
-// Message is a chat message. Tool-call and tool-result round-trips reuse the
-// ToolCalls / ToolCallID fields.
-type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Name       string     `json:"name,omitempty"`
+type ContentPart struct {
+	Type     string    `json:"type"` // "text" | "image_url"
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
 
-// ToolCall is one function invocation requested by the model.
+type ImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"` // "low" | "high" | "auto"
+}
+
+type Message struct {
+	Role        string        `json:"role"`
+	Content     string        `json:"content,omitempty"`
+	ContentList []ContentPart `json:"-"`
+	ToolCalls   []ToolCall    `json:"tool_calls,omitempty"`
+	ToolCallID  string        `json:"tool_call_id,omitempty"`
+	Name        string        `json:"name,omitempty"`
+}
+
+func (m Message) MarshalJSON() ([]byte, error) {
+	type alias Message
+	if len(m.ContentList) > 0 {
+		return json.Marshal(&struct {
+			Role       string        `json:"role"`
+			Content    []ContentPart `json:"content"`
+			ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`
+			ToolCallID string        `json:"tool_call_id,omitempty"`
+			Name       string        `json:"name,omitempty"`
+		}{
+			Role:       m.Role,
+			Content:    m.ContentList,
+			ToolCalls:  m.ToolCalls,
+			ToolCallID: m.ToolCallID,
+			Name:       m.Name,
+		})
+	}
+	return json.Marshal((*alias)(&m))
+}
+
 type ToolCall struct {
 	ID       string `json:"id"`
 	Type     string `json:"type"`
@@ -34,31 +60,35 @@ type ToolCall struct {
 	} `json:"function"`
 }
 
-// Tool is a function definition sent to the model (OpenAI tools format).
 type Tool struct {
 	Type     string   `json:"type"`
 	Function Function `json:"function"`
 }
 
-// Function describes a callable function and its JSON schema.
 type Function struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
 }
 
-// Choice is a single completion alternative.
 type Choice struct {
 	Message      Message `json:"message"`
 	FinishReason string  `json:"finish_reason"`
 }
 
-// ChatResponse is the OpenAI chat.completion envelope.
-type ChatResponse struct {
-	Choices []Choice `json:"choices"`
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
-// Client talks to one model on the gateway.
+type ChatResponse struct {
+	ID      string   `json:"id"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
+}
+
 type Client struct {
 	baseURL string
 	model   string
@@ -71,11 +101,14 @@ func New(baseURL, model, key string) *Client {
 		baseURL: baseURL,
 		model:   model,
 		key:     key,
-		http:    &http.Client{Timeout: 120 * time.Second},
+		http:    &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
-// Chat performs a single completion round with optional tool definitions.
+// Model returns the model id this client was constructed with (fallback when
+// the gateway omits the "model" field in a streamed/partial response).
+func (c *Client) Model() string { return c.model }
+
 func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*ChatResponse, error) {
 	payload := map[string]any{"model": c.model, "messages": msgs}
 	if len(tools) > 0 {

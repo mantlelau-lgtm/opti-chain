@@ -78,3 +78,10 @@ func mapErr(c *gin.Context, err error) bool {
 	response.HTTPFail(c, 500, response.ErrInternal, err.Error())
 	return true
 }
+
+func parseIntDefault(s string, def int) int {
+	if s == "" { return def }
+	v, err := strconv.Atoi(s)
+	if err != nil { return def }
+	return v
+}

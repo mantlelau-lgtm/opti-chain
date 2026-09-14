@@ -21,7 +21,7 @@ func actorOf(c *gin.Context) *authx.Actor { return authx.GetActor(c) }
 // ---- groups ----
 
 func (h *ApprovalHandler) GroupList(c *gin.Context) {
-	list, total, err := h.svc.ListGroups(tenantOf(c), parsePage(c))
+	list, total, err := h.svc.ListGroups(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -34,7 +34,7 @@ func (h *ApprovalHandler) GroupCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	out, err := h.svc.CreateGroup(tenantOf(c), &g)
+	out, err := h.svc.CreateGroup(c.Request.Context(), tenantOf(c), &g)
 	if mapErr(c, err) {
 		return
 	}
@@ -47,7 +47,7 @@ func (h *ApprovalHandler) GroupUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	out, err := h.svc.UpdateGroup(tenantOf(c), idParam(c), &g)
+	out, err := h.svc.UpdateGroup(c.Request.Context(), tenantOf(c), idParam(c), &g)
 	if mapErr(c, err) {
 		return
 	}
@@ -55,7 +55,7 @@ func (h *ApprovalHandler) GroupUpdate(c *gin.Context) {
 }
 
 func (h *ApprovalHandler) GroupDelete(c *gin.Context) {
-	if mapErr(c, h.svc.DeleteGroup(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.svc.DeleteGroup(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -72,7 +72,7 @@ func (h *ApprovalHandler) Submit(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	task, err := h.svc.Submit(tenantOf(c), actorOf(c), body.OrderType, body.OrderID)
+	task, err := h.svc.Submit(c.Request.Context(), tenantOf(c), actorOf(c), body.OrderType, body.OrderID)
 	if mapErr(c, err) {
 		return
 	}
@@ -81,7 +81,7 @@ func (h *ApprovalHandler) Submit(c *gin.Context) {
 
 func (h *ApprovalHandler) Pending(c *gin.Context) {
 	a := actorOf(c)
-	list, err := h.svc.Pending(tenantOf(c), a.UserID)
+	list, err := h.svc.Pending(c.Request.Context(), tenantOf(c), a.UserID)
 	if mapErr(c, err) {
 		return
 	}
@@ -90,7 +90,7 @@ func (h *ApprovalHandler) Pending(c *gin.Context) {
 
 func (h *ApprovalHandler) Processed(c *gin.Context) {
 	a := actorOf(c)
-	list, err := h.svc.Processed(tenantOf(c), a.UserID)
+	list, err := h.svc.Processed(c.Request.Context(), tenantOf(c), a.UserID)
 	if mapErr(c, err) {
 		return
 	}
@@ -99,7 +99,7 @@ func (h *ApprovalHandler) Processed(c *gin.Context) {
 
 func (h *ApprovalHandler) Submitted(c *gin.Context) {
 	a := actorOf(c)
-	list, err := h.svc.Submitted(tenantOf(c), a.UserID)
+	list, err := h.svc.Submitted(c.Request.Context(), tenantOf(c), a.UserID)
 	if mapErr(c, err) {
 		return
 	}
@@ -107,7 +107,7 @@ func (h *ApprovalHandler) Submitted(c *gin.Context) {
 }
 
 func (h *ApprovalHandler) Get(c *gin.Context) {
-	task, err := h.svc.GetTask(tenantOf(c), idParam(c))
+	task, err := h.svc.GetTask(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -124,7 +124,7 @@ func (h *ApprovalHandler) Act(c *gin.Context) {
 		return
 	}
 	a := actorOf(c)
-	task, err := h.svc.Act(tenantOf(c), idParam(c), a.UserID, body.Action, body.Comment)
+	task, err := h.svc.Act(c.Request.Context(), tenantOf(c), idParam(c), a.UserID, body.Action, body.Comment)
 	if mapErr(c, err) {
 		return
 	}

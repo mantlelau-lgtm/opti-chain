@@ -24,7 +24,7 @@ func NewRNDHandler(p *service.ProductService, b *service.BOMService) *RNDHandler
 // ---- Products ----
 
 func (h *RNDHandler) ProductList(c *gin.Context) {
-	list, total, err := h.Products.List(tenantOf(c), parsePage(c))
+	list, total, err := h.Products.List(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -32,7 +32,7 @@ func (h *RNDHandler) ProductList(c *gin.Context) {
 }
 
 func (h *RNDHandler) ProductGet(c *gin.Context) {
-	m, err := h.Products.Get(tenantOf(c), idParam(c))
+	m, err := h.Products.Get(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -45,7 +45,7 @@ func (h *RNDHandler) ProductCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Products.Create(tenantOf(c), &m); mapErr(c, err) {
+	if err := h.Products.Create(c.Request.Context(), tenantOf(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
@@ -57,14 +57,14 @@ func (h *RNDHandler) ProductUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	if err := h.Products.Update(tenantOf(c), idParam(c), &m); mapErr(c, err) {
+	if err := h.Products.Update(c.Request.Context(), tenantOf(c), idParam(c), &m); mapErr(c, err) {
 		return
 	}
 	response.OK(c, m)
 }
 
 func (h *RNDHandler) ProductDelete(c *gin.Context) {
-	if mapErr(c, h.Products.Delete(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.Products.Delete(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})
@@ -101,7 +101,7 @@ func (h *RNDHandler) toInput(req *bomRequest) service.BOMInput {
 }
 
 func (h *RNDHandler) BOMList(c *gin.Context) {
-	list, total, err := h.BOMs.List(tenantOf(c), parsePage(c))
+	list, total, err := h.BOMs.List(c.Request.Context(), tenantOf(c), parsePage(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -110,7 +110,7 @@ func (h *RNDHandler) BOMList(c *gin.Context) {
 
 func (h *RNDHandler) BOMListByProduct(c *gin.Context) {
 	pid, _ := strconv.ParseUint(c.Param("pid"), 10, 64)
-	list, err := h.BOMs.ListByProduct(tenantOf(c), uint(pid))
+	list, err := h.BOMs.ListByProduct(c.Request.Context(), tenantOf(c), uint(pid))
 	if mapErr(c, err) {
 		return
 	}
@@ -118,7 +118,7 @@ func (h *RNDHandler) BOMListByProduct(c *gin.Context) {
 }
 
 func (h *RNDHandler) BOMGet(c *gin.Context) {
-	b, err := h.BOMs.Get(tenantOf(c), idParam(c))
+	b, err := h.BOMs.Get(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -131,7 +131,7 @@ func (h *RNDHandler) BOMCreate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	b, err := h.BOMs.Create(tenantOf(c), h.toInput(&req))
+	b, err := h.BOMs.Create(c.Request.Context(), tenantOf(c), h.toInput(&req))
 	if mapErr(c, err) {
 		return
 	}
@@ -144,7 +144,7 @@ func (h *RNDHandler) BOMUpdate(c *gin.Context) {
 		response.Fail(c, response.ErrBadRequest, err.Error())
 		return
 	}
-	b, err := h.BOMs.Update(tenantOf(c), idParam(c), h.toInput(&req))
+	b, err := h.BOMs.Update(c.Request.Context(), tenantOf(c), idParam(c), h.toInput(&req))
 	if mapErr(c, err) {
 		return
 	}
@@ -152,7 +152,7 @@ func (h *RNDHandler) BOMUpdate(c *gin.Context) {
 }
 
 func (h *RNDHandler) BOMRelease(c *gin.Context) {
-	b, err := h.BOMs.Release(tenantOf(c), idParam(c))
+	b, err := h.BOMs.Release(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}
@@ -160,7 +160,7 @@ func (h *RNDHandler) BOMRelease(c *gin.Context) {
 }
 
 func (h *RNDHandler) BOMDelete(c *gin.Context) {
-	if mapErr(c, h.BOMs.Delete(tenantOf(c), idParam(c))) {
+	if mapErr(c, h.BOMs.Delete(c.Request.Context(), tenantOf(c), idParam(c))) {
 		return
 	}
 	response.OK(c, gin.H{"id": idParam(c)})

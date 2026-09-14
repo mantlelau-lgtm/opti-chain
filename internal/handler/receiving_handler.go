@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"scm/pkg/response"
 	"scm/internal/service"
+	"scm/pkg/response"
 )
 
 // ReceivingHandler exposes purchase-receiving endpoints.
@@ -23,7 +23,6 @@ type receiveRequest struct {
 	Remark        string `json:"remark"`
 	Details       []struct {
 		PODetailID   uint   `json:"po_detail_id"`
-		LocationID   uint   `json:"location_id"`
 		PassedQty    string `json:"passed_qty"`
 		RejectedQty  string `json:"rejected_qty"`
 		RejectReason string `json:"reject_reason"`
@@ -51,13 +50,13 @@ func (h *ReceivingHandler) Receive(c *gin.Context) {
 		rejected, _ := decimal.NewFromString(d.RejectedQty)
 		in.Details = append(in.Details, service.ReceiveDetailInput{
 			PODetailID:   d.PODetailID,
-			LocationID:   d.LocationID,
+			LocationID:   0,
 			PassedQty:    passed,
 			RejectedQty:  rejected,
 			RejectReason: d.RejectReason,
 		})
 	}
-	rc, err := h.svc.Receive(tenantOf(c), idParam(c), in)
+	rc, err := h.svc.Receive(c.Request.Context(), tenantOf(c), idParam(c), in)
 	if mapErr(c, err) {
 		return
 	}
@@ -66,7 +65,7 @@ func (h *ReceivingHandler) Receive(c *gin.Context) {
 
 // Receipts lists the receiving rounds of a PO.
 func (h *ReceivingHandler) Receipts(c *gin.Context) {
-	list, err := h.svc.ListReceipts(tenantOf(c), idParam(c))
+	list, err := h.svc.ListReceipts(c.Request.Context(), tenantOf(c), idParam(c))
 	if mapErr(c, err) {
 		return
 	}

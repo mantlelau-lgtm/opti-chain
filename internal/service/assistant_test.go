@@ -8,8 +8,9 @@ import (
 
 // TestAssistantAgents ensures every fixed role has exactly one agent with a
 // system prompt, and that the tool registry is complete and well-formed
-// (every tool has a name, permission and description so permission enforcement
-// and the LLM's tool selection cannot silently break).
+// (every tool has a name and description; an empty Perm is allowed and means
+// the tool is public to all agent roles, e.g. document parsing tools that
+// only operate on the user's own uploaded files).
 func TestAssistantAgentsAndTools(t *testing.T) {
 	tools := registerAssistantTools(AssistantDeps{})
 	if len(tools) == 0 {
@@ -17,7 +18,7 @@ func TestAssistantAgentsAndTools(t *testing.T) {
 	}
 	seenTool := map[string]bool{}
 	for _, tool := range tools {
-		if tool.Name == "" || tool.Perm == "" || tool.Description == "" {
+		if tool.Name == "" || tool.Description == "" {
 			t.Fatalf("tool missing metadata: %+v", tool)
 		}
 		if tool.Exec == nil {

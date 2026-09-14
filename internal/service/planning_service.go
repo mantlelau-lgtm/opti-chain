@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -49,27 +50,27 @@ func NewPlanningService(d PlanningDeps) *PlanningService {
 // ---- Demand CRUD ----
 
 // CreateDemand persists a demand within the tenant.
-func (s *PlanningService) CreateDemand(t uint, d *model.Demand) error {
+func (s *PlanningService) CreateDemand(ctx context.Context, t uint, d *model.Demand) error {
 	if d.MaterialID == 0 || d.DemandQty.LessThanOrEqual(decimal.Zero) {
 		return errorsBadRequest("material_id and positive demand_qty are required")
 	}
-	return s.demand.Create(t, d)
+	return s.demand.Create(ctx, t, d)
 }
 
-func (s *PlanningService) UpdateDemand(t, id uint, d *model.Demand) error {
+func (s *PlanningService) UpdateDemand(ctx context.Context, t, id uint, d *model.Demand) error {
 	d.ID = id
-	return s.demand.Update(t, d)
+	return s.demand.Update(ctx, t, d)
 }
 
-func (s *PlanningService) GetDemand(t, id uint) (*model.Demand, error) {
-	return s.demand.Get(t, id)
+func (s *PlanningService) GetDemand(ctx context.Context, t, id uint) (*model.Demand, error) {
+	return s.demand.Get(ctx, t, id)
 }
 
-func (s *PlanningService) DeleteDemand(t, id uint) error {
-	return s.demand.Delete(t, id)
+func (s *PlanningService) DeleteDemand(ctx context.Context, t, id uint) error {
+	return s.demand.Delete(ctx, t, id)
 }
 
-func (s *PlanningService) ListDemands(t uint, in PageInput) ([]model.Demand, int64, error) {
+func (s *PlanningService) ListDemands(ctx context.Context, t uint, in PageInput) ([]model.Demand, int64, error) {
 	var (
 		out   []model.Demand
 		total int64
@@ -91,9 +92,9 @@ func (s *PlanningService) ListDemands(t uint, in PageInput) ([]model.Demand, int
 //
 // A suggested purchase order is produced only when the result is positive. The
 // results are persisted as a new MRP batch.
-func (s *PlanningService) ComputeMRP(t uint, batchNo string) ([]model.MrpResult, error) {
+func (s *PlanningService) ComputeMRP(ctx context.Context, t uint, batchNo string) ([]model.MrpResult, error) {
 	// 1) aggregate open demand per material.
-	byMat, err := s.demand.SumOpenByMaterial(t)
+	byMat, err := s.demand.SumOpenByMaterial(context.Background(), t)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +121,7 @@ func (s *PlanningService) ComputeMRP(t uint, batchNo string) ([]model.MrpResult,
 		grossD := decimal.NewFromFloat(gross)
 
 		// current on-hand across all warehouses/locations of the tenant.
-		current, err := s.stock.SumByMaterial(t, matID)
+		current, err := s.stock.SumByMaterial(ctx, t, matID)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +151,7 @@ func (s *PlanningService) ComputeMRP(t uint, batchNo string) ([]model.MrpResult,
 		})
 	}
 
-	if err := s.mrp.BatchCreate(t, results); err != nil {
+	if err := s.mrp.BatchCreate(ctx, t, results); err != nil {
 		return nil, err
 	}
 	// mark processed demands as generated.
@@ -180,7 +181,7 @@ func (s *PlanningService) sumOnOrder(t, matID uint) (decimal.Decimal, error) {
 }
 
 // ListMrp returns paginated MRP results within the tenant.
-func (s *PlanningService) ListMrp(t uint, in PageInput) ([]model.MrpResult, int64, error) {
+func (s *PlanningService) ListMrp(ctx context.Context, t uint, in PageInput) ([]model.MrpResult, int64, error) {
 	var (
 		out   []model.MrpResult
 		total int64
@@ -192,12 +193,12 @@ func (s *PlanningService) ListMrp(t uint, in PageInput) ([]model.MrpResult, int6
 	return out, total, nil
 }
 
-func (s *PlanningService) GetMrp(t, id uint) (*model.MrpResult, error) {
-	return s.mrp.Get(t, id)
+func (s *PlanningService) GetMrp(ctx context.Context, t, id uint) (*model.MrpResult, error) {
+	return s.mrp.Get(ctx, t, id)
 }
 
-func (s *PlanningService) DeleteMrp(t, id uint) error {
-	return s.mrp.Delete(t, id)
+func (s *PlanningService) DeleteMrp(ctx context.Context, t, id uint) error {
+	return s.mrp.Delete(ctx, t, id)
 }
 
 // ConvertMRP turns a single MRP result into a purchase order.
@@ -206,8 +207,8 @@ func (s *PlanningService) DeleteMrp(t, id uint) error {
 // PO number defaults to "MRP-<mrpNumber>-<materialID>" and can be overridden.
 // The MRP result is then flipped to CONVERTED to record that the suggestion has
 // been actioned, so it is not converted twice.
-func (s *PlanningService) ConvertMRP(t, mrpID uint, poNumber string) (*model.PurchaseOrder, error) {
-	mrp, err := s.mrp.Get(t, mrpID)
+func (s *PlanningService) ConvertMRP(ctx context.Context, t, mrpID uint, poNumber string) (*model.PurchaseOrder, error) {
+	mrp, err := s.mrp.Get(ctx, t, mrpID)
 	if mrp == nil || err != nil {
 		return nil, errNotFound(mrpID)
 	}
@@ -234,7 +235,7 @@ func (s *PlanningService) ConvertMRP(t, mrpID uint, poNumber string) (*model.Pur
 		number = "MRP-" + mrp.MrpNumber + "-" + itob(mrp.MaterialID)
 	}
 
-	po, err := s.posvc.Create(t, CreatePOInput{
+	po, err := s.posvc.Create(context.Background(), t, CreatePOInput{
 		PONumber:   number,
 		SupplierID: supplierID,
 		OrderDate:  time.Now(),
@@ -246,7 +247,7 @@ func (s *PlanningService) ConvertMRP(t, mrpID uint, poNumber string) (*model.Pur
 
 	// Mark the suggestion as actioned.
 	mrp.Status = model.MrpStatusConverted
-	if err := s.mrp.Update(t, mrp); err != nil {
+	if err := s.mrp.Update(ctx, t, mrp); err != nil {
 		return nil, err
 	}
 	return po, nil

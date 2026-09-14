@@ -10,6 +10,7 @@ import (
 )
 
 var log = zap.NewExample()
+
 func SeedRBAC(db *gorm.DB) error {
 	var count int64
 	if err := db.Model(&model.Tenant{}).Count(&count).Error; err != nil {
@@ -158,7 +159,7 @@ func SeedRBAC(db *gorm.DB) error {
 
 	// adopt pre-tenancy dev data into the demo tenant.
 	for _, t := range []string{
-		"sys_material", "sys_supplier", "base_customer", "sys_warehouse", "sys_location",
+		"sys_material", "sys_supplier", "base_customer", "sys_warehouse",
 		"pur_order", "pur_receipt", "inv_stock", "inv_order", "inv_transaction_log",
 		"plan_demand", "plan_mrp_result", "sale_order",
 	} {
@@ -334,6 +335,68 @@ func EnsureApprovalCatalog(db *gorm.DB) error {
 	return nil
 }
 
+// EnsureLogisticsCatalog idempotently adds the logistics module and permissions,
+// granting logistics:view to all roles and logistics:manage to admin + supervisors.
+func EnsureLogisticsCatalog(db *gorm.DB) error {
+	var mod model.Module
+	if err := db.Where("code = ?", "logistics").First(&mod).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		mod = model.Module{Code: "logistics", Name: "物流", Sort: 7}
+		if err := db.Create(&mod).Error; err != nil {
+			return err
+		}
+	}
+	defs := []struct{ code, name string }{
+		{"logistics:view", "物流查询查看"},
+		{"logistics:manage", "物流运单管理"},
+	}
+	permID := map[string]uint{}
+	for _, d := range defs {
+		var p model.Permission
+		if err := db.Where("code = ?", d.code).First(&p).Error; err == nil {
+			permID[d.code] = p.ID
+			continue
+		}
+		np := model.Permission{Code: d.code, Name: d.name, ModuleID: mod.ID}
+		if err := db.Create(&np).Error; err != nil {
+			return err
+		}
+		permID[d.code] = np.ID
+	}
+	var roles []model.Role
+	if err := db.Find(&roles).Error; err != nil {
+		return err
+	}
+	roleID := map[string]uint{}
+	for _, r := range roles {
+		roleID[r.Code] = r.ID
+	}
+	grant := map[string][]string{
+		model.RoleAdmin:    {"logistics:view", "logistics:manage"},
+		model.RoleProcSpec: {"logistics:view"},
+		model.RoleProcMgr:  {"logistics:view", "logistics:manage"},
+		model.RolePlanSpec: {"logistics:view"},
+		model.RolePlanSup:  {"logistics:view", "logistics:manage"},
+		model.RoleQC:       {"logistics:view"},
+		model.RoleWhMgr:    {"logistics:view", "logistics:manage"},
+	}
+	for rc, codes := range grant {
+		for _, pc := range codes {
+			var cnt int64
+			db.Model(&model.RolePermission{}).
+				Where("role_id = ? AND permission_id = ?", roleID[rc], permID[pc]).Count(&cnt)
+			if cnt == 0 && roleID[rc] != 0 {
+				if err := db.Create(&model.RolePermission{RoleID: roleID[rc], PermissionID: permID[pc]}).Error; err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // MigrateRoles replaces the legacy six-role set with the current seven-role
 // design on an EXISTING database: wipes roles/matrix/assignments, re-seeds the
 // new roles and matrix, and remaps users from old roles to the closest new
@@ -442,11 +505,11 @@ func MigrateRoles(db *gorm.DB) error {
 
 	// remap users: old role -> closest new role (finance has no successor).
 	mapping := map[string]string{
-		"admin":                model.RoleAdmin,
-		"category_manager":     model.RoleProcMgr,
+		"admin":                 model.RoleAdmin,
+		"category_manager":      model.RoleProcMgr,
 		"procurement_assistant": model.RoleProcSpec,
-		"committee":            model.RoleProcMgr,
-		"qc_wh":                model.RoleQC,
+		"committee":             model.RoleProcMgr,
+		"qc_wh":                 model.RoleQC,
 	}
 	seen := map[[2]uint]bool{}
 	for _, ur := range urs {

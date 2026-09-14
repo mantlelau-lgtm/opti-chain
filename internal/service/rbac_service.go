@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -90,8 +91,13 @@ func (s *RBACService) RefreshCache() error {
 
 // HasPerm reports whether the actor holds the permission. AK/SK actors carry
 // an explicit permission set on the key (empty = all); JWT actors resolve
-// through their roles.
+// through their roles. An empty perm string is treated as "no permission gate"
+// and always returns true, so public tools (e.g. document parser) can be
+// exposed to every agent role without modifying any role-permission matrix.
 func (s *RBACService) HasPerm(a *authx.Actor, perm string) bool {
+	if strings.TrimSpace(perm) == "" {
+		return true
+	}
 	if a == nil {
 		return false
 	}
@@ -250,7 +256,7 @@ func (s *RBACService) ListTenants(in PageInput) ([]model.Tenant, int64, error) {
 }
 
 // IsPlatform reports whether the tenant id is the platform tenant.
-func (s *RBACService) IsPlatform(t uint) bool {
+func (s *RBACService) IsPlatform(ctx context.Context, t uint) bool {
 	tn, err := s.tenants.Get(t)
 	return err == nil && tn != nil && tn.Code == "platform"
 }
@@ -269,7 +275,7 @@ func (s *RBACService) CreateTenant(t *model.Tenant) (*model.Tenant, string, erro
 		return nil, "", err
 	}
 	const adminPass = "admin123"
-	if _, err := s.CreateUser(t.ID, CreateUserInput{
+	if _, err := s.CreateUser(context.Background(), t.ID, CreateUserInput{
 		Username:  "admin",
 		Password:  adminPass,
 		Name:      "管理员",
@@ -292,12 +298,12 @@ func (s *RBACService) GetTenantByCode(code string) (*model.Tenant, error) {
 
 // ---- user management (tenant scope) ----
 
-func (s *RBACService) ListUsers(t uint, in PageInput) ([]model.User, int64, error) {
+func (s *RBACService) ListUsers(ctx context.Context, t uint, in PageInput) ([]model.User, int64, error) {
 	var (
 		out   []model.User
 		total int64
 	)
-	if err := s.users.List(t, repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
+	if err := s.users.List(ctx, t, repository.ListFilter{Page: in.Page, Keyword: in.Keyword}, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
@@ -313,14 +319,14 @@ type CreateUserInput struct {
 	TenantCode string   `json:"tenant_code"` // platform-scope bootstrap: create the user in another tenant
 }
 
-func (s *RBACService) CreateUser(t uint, in CreateUserInput) (*model.User, error) {
+func (s *RBACService) CreateUser(ctx context.Context, t uint, in CreateUserInput) (*model.User, error) {
 	if in.Username == "" || in.Password == "" {
 		return nil, errorsBadRequest("username/password are required")
 	}
 	// Only the platform tenant may provision users into another tenant by
 	// tenant_code; tenant admins can only manage their own users.
 	if in.TenantCode != "" {
-		if !s.IsPlatform(t) {
+		if !s.IsPlatform(context.Background(), t) {
 			return nil, errf(ErrForbidden, "only the platform can create users in other tenants")
 		}
 		target, err := s.tenants.GetByCode(in.TenantCode)
@@ -332,7 +338,7 @@ func (s *RBACService) CreateUser(t uint, in CreateUserInput) (*model.User, error
 		}
 		t = target.ID
 	}
-	if existing, _ := s.users.GetByTenantUsername(t, in.Username); existing != nil {
+	if existing, _ := s.users.GetByTenantUsername(ctx, t, in.Username); existing != nil {
 		return nil, errf(ErrConflict, "username already exists in this tenant")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
@@ -350,8 +356,8 @@ func (s *RBACService) CreateUser(t uint, in CreateUserInput) (*model.User, error
 }
 
 // UpdateUser edits name/status/password(optional)/roles.
-func (s *RBACService) UpdateUser(t, id uint, in CreateUserInput) (*model.User, error) {
-	u, err := s.users.Get(t, id)
+func (s *RBACService) UpdateUser(ctx context.Context, t, id uint, in CreateUserInput) (*model.User, error) {
+	u, err := s.users.Get(ctx, t, id)
 	if u == nil {
 		return nil, errNotFound(id)
 	}
@@ -371,7 +377,7 @@ func (s *RBACService) UpdateUser(t, id uint, in CreateUserInput) (*model.User, e
 		}
 		u.PasswordHash = string(hash)
 	}
-	if err := s.users.Update(t, u); err != nil {
+	if err := s.users.Update(ctx, t, u); err != nil {
 		return nil, err
 	}
 	if len(in.RoleCodes) > 0 {
@@ -382,8 +388,8 @@ func (s *RBACService) UpdateUser(t, id uint, in CreateUserInput) (*model.User, e
 	return u, nil
 }
 
-func (s *RBACService) DeleteUser(t, id uint) error {
-	return s.users.Delete(t, id)
+func (s *RBACService) DeleteUser(ctx context.Context, t, id uint) error {
+	return s.users.Delete(ctx, t, id)
 }
 
 // UserRoles lists role codes of a user (for the admin UI).

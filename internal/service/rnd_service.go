@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
@@ -17,27 +18,27 @@ func NewProductService(repo *repository.ProductRepo) *ProductService {
 	return &ProductService{repo: repo}
 }
 
-func (s *ProductService) Create(t uint, m *model.Product) error {
+func (s *ProductService) Create(ctx context.Context, t uint, m *model.Product) error {
 	if m.ProductCode == "" || m.Name == "" || m.Unit == "" {
 		return errorsBadRequest("product_code/name/unit are required")
 	}
-	return s.repo.Create(t, m)
+	return s.repo.Create(ctx, t, m)
 }
 
-func (s *ProductService) Update(t, id uint, m *model.Product) error {
+func (s *ProductService) Update(ctx context.Context, t, id uint, m *model.Product) error {
 	m.ID = id
-	return s.repo.Update(t, m)
+	return s.repo.Update(ctx, t, m)
 }
 
-func (s *ProductService) Get(t, id uint) (*model.Product, error) {
-	return s.repo.Get(t, id)
+func (s *ProductService) Get(ctx context.Context, t, id uint) (*model.Product, error) {
+	return s.repo.Get(ctx, t, id)
 }
 
-func (s *ProductService) Delete(t, id uint) error {
-	return s.repo.Delete(t, id)
+func (s *ProductService) Delete(ctx context.Context, t, id uint) error {
+	return s.repo.Delete(ctx, t, id)
 }
 
-func (s *ProductService) List(t uint, in PageInput) ([]model.Product, int64, error) {
+func (s *ProductService) List(ctx context.Context, t uint, in PageInput) ([]model.Product, int64, error) {
 	var (
 		out   []model.Product
 		total int64
@@ -94,18 +95,18 @@ type BOMInput struct {
 
 // Create validates and persists a DRAFT BOM. The version is auto-assigned as
 // max(existing versions) + 1 for the product.
-func (s *BOMService) Create(t uint, in BOMInput) (*model.BOM, error) {
+func (s *BOMService) Create(ctx context.Context, t uint, in BOMInput) (*model.BOM, error) {
 	if in.ProductID == 0 || len(in.Details) == 0 {
 		return nil, errorsBadRequest("product_id and at least one component are required")
 	}
 	if err := s.validateDetails(t, in.Details); err != nil {
 		return nil, err
 	}
-	if _, err := s.products.Get(t, in.ProductID); err != nil {
+	if _, err := s.products.Get(ctx, t, in.ProductID); err != nil {
 		return nil, errNotFound(in.ProductID)
 	}
 	version := int64(1)
-	if n, _ := s.repo.CountByProduct(t, in.ProductID); n > 0 {
+	if n, _ := s.repo.CountByProduct(ctx, t, in.ProductID); n > 0 {
 		version = n + 1
 	}
 	b := &model.BOM{
@@ -117,15 +118,15 @@ func (s *BOMService) Create(t uint, in BOMInput) (*model.BOM, error) {
 		Remark:    in.Remark,
 		Details:   toBOMDetails(in.Details),
 	}
-	if err := s.repo.CreateWithDetails(t, b); err != nil {
+	if err := s.repo.CreateWithDetails(ctx, t, b); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, b.ID)
+	return s.repo.GetWithDetails(ctx, t, b.ID)
 }
 
 // Update replaces a DRAFT BOM's header + lines. Released BOMs are immutable.
-func (s *BOMService) Update(t, id uint, in BOMInput) (*model.BOM, error) {
-	b, err := s.repo.GetWithDetails(t, id)
+func (s *BOMService) Update(ctx context.Context, t, id uint, in BOMInput) (*model.BOM, error) {
+	b, err := s.repo.GetWithDetails(ctx, t, id)
 	if b == nil {
 		return nil, errNotFound(id)
 	}
@@ -145,15 +146,15 @@ func (s *BOMService) Update(t, id uint, in BOMInput) (*model.BOM, error) {
 	b.UnitQty = defaultDecimal(in.UnitQty)
 	b.Remark = in.Remark
 	b.Details = toBOMDetails(in.Details)
-	if err := s.repo.UpdateWithDetails(t, b); err != nil {
+	if err := s.repo.UpdateWithDetails(ctx, t, b); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, id)
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
 // Delete removes a DRAFT BOM.
-func (s *BOMService) Delete(t, id uint) error {
-	b, err := s.repo.Get(t, id)
+func (s *BOMService) Delete(ctx context.Context, t, id uint) error {
+	b, err := s.repo.Get(ctx, t, id)
 	if b == nil {
 		return errNotFound(id)
 	}
@@ -163,13 +164,13 @@ func (s *BOMService) Delete(t, id uint) error {
 	if b.Status != model.BOMStatusDraft {
 		return errorsBadRequest("only DRAFT BOMs can be deleted")
 	}
-	return s.repo.Delete(t, id)
+	return s.repo.Delete(ctx, t, id)
 }
 
 // Release promotes a DRAFT BOM to RELEASED and makes it the product's default,
 // demoting the previous default (if any) to OBSOLETE, in one transaction.
-func (s *BOMService) Release(t, id uint) (*model.BOM, error) {
-	b, err := s.repo.GetWithDetails(t, id)
+func (s *BOMService) Release(ctx context.Context, t, id uint) (*model.BOM, error) {
+	b, err := s.repo.GetWithDetails(ctx, t, id)
 	if b == nil {
 		return nil, errNotFound(id)
 	}
@@ -193,14 +194,14 @@ func (s *BOMService) Release(t, id uint) (*model.BOM, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, id)
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
-func (s *BOMService) Get(t, id uint) (*model.BOM, error) {
-	return s.repo.GetWithDetails(t, id)
+func (s *BOMService) Get(ctx context.Context, t, id uint) (*model.BOM, error) {
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
-func (s *BOMService) List(t uint, in PageInput) ([]model.BOM, int64, error) {
+func (s *BOMService) List(ctx context.Context, t uint, in PageInput) ([]model.BOM, int64, error) {
 	var (
 		out   []model.BOM
 		total int64
@@ -212,17 +213,17 @@ func (s *BOMService) List(t uint, in PageInput) ([]model.BOM, int64, error) {
 	return out, total, nil
 }
 
-func (s *BOMService) ListByProduct(t, productID uint) ([]model.BOM, error) {
+func (s *BOMService) ListByProduct(ctx context.Context, t, productID uint) ([]model.BOM, error) {
 	var out []model.BOM
-	if err := s.repo.ListByProduct(t, productID, &out); err != nil {
+	if err := s.repo.ListByProduct(ctx, t, productID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
 // DefaultByProduct returns the effective BOM of a product (nil when none).
-func (s *BOMService) DefaultByProduct(t, productID uint) (*model.BOM, error) {
-	return s.repo.DefaultByProduct(t, productID)
+func (s *BOMService) DefaultByProduct(ctx context.Context, t, productID uint) (*model.BOM, error) {
+	return s.repo.DefaultByProduct(ctx, t, productID)
 }
 
 func (s *BOMService) validateDetails(t uint, ds []BOMDetailInput) error {
@@ -230,7 +231,7 @@ func (s *BOMService) validateDetails(t uint, ds []BOMDetailInput) error {
 		if d.QtyPerUnit.LessThanOrEqual(decimal.Zero) {
 			return errorsBadRequest("component qty must be positive")
 		}
-		if m, _ := s.materials.Get(t, d.ComponentID); m == nil {
+		if m, _ := s.materials.Get(context.Background(), t, d.ComponentID); m == nil {
 			return errNotFound(d.ComponentID)
 		}
 	}

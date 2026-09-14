@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -19,15 +20,15 @@ func NewCustomerService(repo *repository.CustomerRepo) *CustomerService {
 	return &CustomerService{repo: repo}
 }
 
-func (s *CustomerService) Create(t uint, m *model.Customer) error {
+func (s *CustomerService) Create(ctx context.Context, t uint, m *model.Customer) error {
 	if m.CustomerCode == "" || m.Name == "" {
 		return errorsBadRequest("customer_code/name are required")
 	}
-	return s.repo.Create(t, m)
+	return s.repo.Create(ctx, t, m)
 }
 
-func (s *CustomerService) Update(t, id uint, m *model.Customer) error {
-	old, err := s.repo.Get(t, id)
+func (s *CustomerService) Update(ctx context.Context, t, id uint, m *model.Customer) error {
+	old, err := s.repo.Get(ctx, t, id)
 	if old == nil {
 		return errNotFound(id)
 	}
@@ -38,18 +39,18 @@ func (s *CustomerService) Update(t, id uint, m *model.Customer) error {
 	if m.CreatedBy == "" {
 		m.CreatedBy = old.CreatedBy
 	}
-	return s.repo.Update(t, m)
+	return s.repo.Update(ctx, t, m)
 }
 
-func (s *CustomerService) Get(t, id uint) (*model.Customer, error) {
-	return s.repo.Get(t, id)
+func (s *CustomerService) Get(ctx context.Context, t, id uint) (*model.Customer, error) {
+	return s.repo.Get(ctx, t, id)
 }
 
-func (s *CustomerService) Delete(t, id uint) error {
-	return s.repo.Delete(t, id)
+func (s *CustomerService) Delete(ctx context.Context, t, id uint) error {
+	return s.repo.Delete(ctx, t, id)
 }
 
-func (s *CustomerService) List(t uint, in PageInput) ([]model.Customer, int64, error) {
+func (s *CustomerService) List(ctx context.Context, t uint, in PageInput) ([]model.Customer, int64, error) {
 	var (
 		out   []model.Customer
 		total int64
@@ -107,11 +108,11 @@ type SODetailInput struct {
 
 // Create validates an SO, computes totals and persists it as DRAFT. The
 // customer must exist and be approved (SOP 准入管控).
-func (s *SalesOrderService) Create(t uint, in CreateSOInput) (*model.SaleOrder, error) {
+func (s *SalesOrderService) Create(ctx context.Context, t uint, in CreateSOInput) (*model.SaleOrder, error) {
 	if in.CustomerID == 0 || len(in.Details) == 0 {
 		return nil, errorsBadRequest("customer_id and at least one detail are required")
 	}
-	cust, err := s.customers.Get(t, in.CustomerID)
+	cust, err := s.customers.Get(context.Background(), t, in.CustomerID)
 	if cust == nil {
 		return nil, errNotFound(in.CustomerID)
 	}
@@ -143,17 +144,17 @@ func (s *SalesOrderService) Create(t uint, in CreateSOInput) (*model.SaleOrder, 
 		})
 		so.TotalAmount = so.TotalAmount.Add(lineTotal)
 	}
-	if err := s.repo.CreateWithDetails(t, so); err != nil {
+	if err := s.repo.CreateWithDetails(ctx, t, so); err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, so.ID)
+	return s.repo.GetWithDetails(ctx, t, so.ID)
 }
 
-func (s *SalesOrderService) Get(t, id uint) (*model.SaleOrder, error) {
-	return s.repo.GetWithDetails(t, id)
+func (s *SalesOrderService) Get(ctx context.Context, t, id uint) (*model.SaleOrder, error) {
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
-func (s *SalesOrderService) List(t uint, in PageInput) ([]model.SaleOrder, int64, error) {
+func (s *SalesOrderService) List(ctx context.Context, t uint, in PageInput) ([]model.SaleOrder, int64, error) {
 	var (
 		out   []model.SaleOrder
 		total int64
@@ -167,8 +168,8 @@ func (s *SalesOrderService) List(t uint, in PageInput) ([]model.SaleOrder, int64
 
 // Delete removes an SO. Only DRAFT orders may be deleted — approved orders
 // hold stock reservations and credit, so they must be cancelled instead.
-func (s *SalesOrderService) Delete(t, id uint) error {
-	so, err := s.repo.Get(t, id)
+func (s *SalesOrderService) Delete(ctx context.Context, t, id uint) error {
+	so, err := s.repo.Get(ctx, t, id)
 	if so == nil {
 		return errNotFound(id)
 	}
@@ -178,14 +179,14 @@ func (s *SalesOrderService) Delete(t, id uint) error {
 	if so.Status != model.SOStatusDraft {
 		return errorsBadRequest("only DRAFT sales orders can be deleted; cancel it instead")
 	}
-	return s.repo.Delete(t, id)
+	return s.repo.Delete(ctx, t, id)
 }
 
 // Approve transitions DRAFT -> APPROVED: every line reserves available stock
 // (available = quantity - locked_quantity) and the order amount is charged to
 // the customer's credit line. Both happen in one transaction.
-func (s *SalesOrderService) Approve(t, id uint) (*model.SaleOrder, error) {
-	so, err := s.repo.GetWithDetails(t, id)
+func (s *SalesOrderService) Approve(ctx context.Context, t, id uint) (*model.SaleOrder, error) {
+	so, err := s.repo.GetWithDetails(ctx, t, id)
 	if so == nil {
 		return nil, errNotFound(id)
 	}
@@ -195,7 +196,7 @@ func (s *SalesOrderService) Approve(t, id uint) (*model.SaleOrder, error) {
 	if so.Status != model.SOStatusDraft {
 		return nil, errorsBadRequest("only DRAFT sales orders can be approved")
 	}
-	cust, err := s.customers.Get(t, so.CustomerID)
+	cust, err := s.customers.Get(context.Background(), t, so.CustomerID)
 	if cust == nil || err != nil {
 		return nil, errNotFound(so.CustomerID)
 	}
@@ -232,13 +233,13 @@ func (s *SalesOrderService) Approve(t, id uint) (*model.SaleOrder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, id)
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
 // Cancel transitions DRAFT/APPROVED -> CANCELLED. Approved orders release
 // their stock reservations and credit.
-func (s *SalesOrderService) Cancel(t, id uint) (*model.SaleOrder, error) {
-	so, err := s.repo.GetWithDetails(t, id)
+func (s *SalesOrderService) Cancel(ctx context.Context, t, id uint) (*model.SaleOrder, error) {
+	so, err := s.repo.GetWithDetails(ctx, t, id)
 	if so == nil {
 		return nil, errNotFound(id)
 	}
@@ -270,7 +271,7 @@ func (s *SalesOrderService) Cancel(t, id uint) (*model.SaleOrder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetWithDetails(t, id)
+	return s.repo.GetWithDetails(ctx, t, id)
 }
 
 // lockStockTx reserves qty for a material across stock rows inside tx.

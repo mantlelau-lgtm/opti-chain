@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -40,19 +41,19 @@ func NewApprovalService(d ApprovalDeps) *ApprovalService {
 
 // ---- group management ----
 
-func (s *ApprovalService) ListGroups(t uint, in PageInput) ([]model.ApprovalGroup, int64, error) {
+func (s *ApprovalService) ListGroups(ctx context.Context, t uint, in PageInput) ([]model.ApprovalGroup, int64, error) {
 	var (
 		out   []model.ApprovalGroup
 		total int64
 	)
 	f := repository.ListFilter{Page: in.Page, Keyword: in.Keyword, Tenant: t}
-	if err := s.groups.List(t, f, &out, &total); err != nil {
+	if err := s.groups.List(ctx, t, f, &out, &total); err != nil {
 		return nil, 0, err
 	}
 	return out, total, nil
 }
 
-func (s *ApprovalService) CreateGroup(t uint, g *model.ApprovalGroup) (*model.ApprovalGroup, error) {
+func (s *ApprovalService) CreateGroup(ctx context.Context, t uint, g *model.ApprovalGroup) (*model.ApprovalGroup, error) {
 	if g.Name == "" || g.OrderType == "" || len(g.Members) == 0 {
 		return nil, errorsBadRequest("name, order_type and at least one member are required")
 	}
@@ -63,16 +64,16 @@ func (s *ApprovalService) CreateGroup(t uint, g *model.ApprovalGroup) (*model.Ap
 		g.Mode = model.ApprovalModeAll
 	}
 	// one group per order type: reject duplicates instead of shadowing.
-	if existing, _ := s.groups.ListByType(t, g.OrderType); len(existing) > 0 {
+	if existing, _ := s.groups.ListByType(ctx, t, g.OrderType); len(existing) > 0 {
 		return nil, errf(ErrConflict, "该订单类型已配置审批组，请编辑现有审批组")
 	}
-	if err := s.groups.CreateWithMembers(t, g); err != nil {
+	if err := s.groups.CreateWithMembers(ctx, t, g); err != nil {
 		return nil, err
 	}
-	return s.groups.GetWithMembers(t, g.ID)
+	return s.groups.GetWithMembers(ctx, t, g.ID)
 }
 
-func (s *ApprovalService) UpdateGroup(t, id uint, g *model.ApprovalGroup) (*model.ApprovalGroup, error) {
+func (s *ApprovalService) UpdateGroup(ctx context.Context, t, id uint, g *model.ApprovalGroup) (*model.ApprovalGroup, error) {
 	if g.Name == "" || len(g.Members) == 0 {
 		return nil, errorsBadRequest("name and at least one member are required")
 	}
@@ -80,25 +81,25 @@ func (s *ApprovalService) UpdateGroup(t, id uint, g *model.ApprovalGroup) (*mode
 		g.Mode = model.ApprovalModeAll
 	}
 	// preserve audit fields (the bound struct has zero CreatedAt/CreatedBy).
-	if old, _ := s.groups.Get(t, id); old != nil {
+	if old, _ := s.groups.GetWithMembers(ctx, t, id); old != nil {
 		g.CreatedAt = old.CreatedAt
 		g.CreatedBy = old.CreatedBy
 	}
 	g.ID = id
-	if err := s.groups.UpdateWithMembers(t, g); err != nil {
+	if err := s.groups.UpdateWithMembers(ctx, t, g); err != nil {
 		return nil, err
 	}
-	return s.groups.GetWithMembers(t, id)
+	return s.groups.GetWithMembers(ctx, t, id)
 }
 
-func (s *ApprovalService) DeleteGroup(t, id uint) error {
-	return s.groups.Delete(t, id)
+func (s *ApprovalService) DeleteGroup(ctx context.Context, t, id uint) error {
+	return s.groups.Delete(ctx, t, id)
 }
 
 // ---- submit / workbench ----
 
 // Submit creates an approval task for an order using its order-type group.
-func (s *ApprovalService) Submit(t uint, a *authx.Actor, orderType string, orderID uint) (*model.ApprovalTask, error) {
+func (s *ApprovalService) Submit(ctx context.Context, t uint, a *authx.Actor, orderType string, orderID uint) (*model.ApprovalTask, error) {
 	if a == nil {
 		return nil, errorsBadRequest("authenticated user required")
 	}
@@ -106,11 +107,11 @@ func (s *ApprovalService) Submit(t uint, a *authx.Actor, orderType string, order
 		return nil, errorsBadRequest("order_type must be PO or SO")
 	}
 
-	orderNumber, err := s.resolveOrder(t, orderType, orderID)
+	orderNumber, err := s.resolveOrder(ctx, t, orderType, orderID)
 	if err != nil {
 		return nil, err
 	}
-	groups, err := s.groups.ListByType(t, orderType)
+	groups, err := s.groups.ListByType(ctx, t, orderType)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +133,7 @@ func (s *ApprovalService) Submit(t uint, a *authx.Actor, orderType string, order
 	}
 	for _, m := range group.Members {
 		name := ""
-		if u, _ := s.users.Get(t, m.UserID); u != nil {
+		if u, _ := s.users.Get(ctx, t, m.UserID); u != nil {
 			name = u.Name
 			if name == "" {
 				name = u.Username
@@ -144,22 +145,22 @@ func (s *ApprovalService) Submit(t uint, a *authx.Actor, orderType string, order
 			Status:   model.ApprovalStatusPending,
 		})
 	}
-	if err := s.tasks.CreateWithMembers(t, task); err != nil {
+	if err := s.tasks.CreateWithMembers(ctx, t, task); err != nil {
 		return nil, err
 	}
-	return s.tasks.GetWithMembers(t, task.ID)
+	return s.tasks.GetWithMembers(ctx, t, task.ID)
 }
 
-func (s *ApprovalService) resolveOrder(t uint, orderType string, orderID uint) (string, error) {
+func (s *ApprovalService) resolveOrder(ctx context.Context, t uint, orderType string, orderID uint) (string, error) {
 	switch orderType {
 	case model.ApprovalTypePO:
-		po, err := s.poSvc.Get(t, orderID)
+		po, err := s.poSvc.Get(ctx, t, orderID)
 		if po == nil || err != nil {
 			return "", errNotFound(orderID)
 		}
 		return po.PONumber, nil
 	case model.ApprovalTypeSO:
-		so, err := s.soSvc.Get(t, orderID)
+		so, err := s.soSvc.Get(ctx, t, orderID)
 		if so == nil || err != nil {
 			return "", errNotFound(orderID)
 		}
@@ -168,29 +169,29 @@ func (s *ApprovalService) resolveOrder(t uint, orderType string, orderID uint) (
 	return "", errorsBadRequest("unknown order type")
 }
 
-func (s *ApprovalService) GetTask(t, id uint) (*model.ApprovalTask, error) {
-	return s.tasks.GetWithMembers(t, id)
+func (s *ApprovalService) GetTask(ctx context.Context, t, id uint) (*model.ApprovalTask, error) {
+	return s.tasks.GetWithMembers(ctx, t, id)
 }
 
-func (s *ApprovalService) Pending(t, userID uint) ([]model.ApprovalTask, error) {
+func (s *ApprovalService) Pending(ctx context.Context, t, userID uint) ([]model.ApprovalTask, error) {
 	var out []model.ApprovalTask
-	if err := s.tasks.PendingForUser(t, userID, &out); err != nil {
+	if err := s.tasks.PendingForUser(ctx, t, userID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (s *ApprovalService) Processed(t, userID uint) ([]model.ApprovalTask, error) {
+func (s *ApprovalService) Processed(ctx context.Context, t, userID uint) ([]model.ApprovalTask, error) {
 	var out []model.ApprovalTask
-	if err := s.tasks.ProcessedForUser(t, userID, &out); err != nil {
+	if err := s.tasks.ProcessedForUser(ctx, t, userID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (s *ApprovalService) Submitted(t, userID uint) ([]model.ApprovalTask, error) {
+func (s *ApprovalService) Submitted(ctx context.Context, t, userID uint) ([]model.ApprovalTask, error) {
 	var out []model.ApprovalTask
-	if err := s.tasks.SubmittedBy(t, userID, &out); err != nil {
+	if err := s.tasks.SubmittedBy(ctx, t, userID, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -198,8 +199,8 @@ func (s *ApprovalService) Submitted(t, userID uint) ([]model.ApprovalTask, error
 
 // Act records the current user's approval/rejection and re-evaluates the task.
 // On full approval it triggers the order's own approval side effect.
-func (s *ApprovalService) Act(t uint, taskID, userID uint, action, comment string) (*model.ApprovalTask, error) {
-	task, err := s.tasks.GetWithMembers(t, taskID)
+func (s *ApprovalService) Act(ctx context.Context, t uint, taskID, userID uint, action, comment string) (*model.ApprovalTask, error) {
+	task, err := s.tasks.GetWithMembers(ctx, t, taskID)
 	if task == nil {
 		return nil, errNotFound(taskID)
 	}
@@ -236,7 +237,7 @@ func (s *ApprovalService) Act(t uint, taskID, userID uint, action, comment strin
 		}
 		// re-evaluate the whole task ON THE SAME tx so the uncommitted member
 		// update is visible.
-		final, err := s.evaluateTx(tx, t, taskID)
+		final, err := s.evaluateTx(ctx, tx, t, taskID)
 		if err != nil {
 			return err
 		}
@@ -254,18 +255,18 @@ func (s *ApprovalService) Act(t uint, taskID, userID uint, action, comment strin
 	}
 
 	// trigger order side effects on completion.
-	updated, _ := s.tasks.GetWithMembers(t, taskID)
+	updated, _ := s.tasks.GetWithMembers(ctx, t, taskID)
 	if updated != nil && updated.Status == model.ApprovalStatusApproved {
-		if err := s.applyOrderApproval(t, updated); err != nil {
+		if err := s.applyOrderApproval(ctx, t, updated); err != nil {
 			return nil, err
 		}
 	}
-	return s.tasks.GetWithMembers(t, taskID)
+	return s.tasks.GetWithMembers(ctx, t, taskID)
 }
 
 // evaluateTx determines the task's final status, reading member records from
 // the caller's transaction.
-func (s *ApprovalService) evaluateTx(tx *gorm.DB, t, taskID uint) (string, error) {
+func (s *ApprovalService) evaluateTx(ctx context.Context, tx *gorm.DB, t, taskID uint) (string, error) {
 	var task model.ApprovalTask
 	if err := tx.Preload("Members").Where("tenant_id = ?", t).First(&task, taskID).Error; err != nil {
 		return "", err
@@ -283,7 +284,7 @@ func (s *ApprovalService) evaluateTx(tx *gorm.DB, t, taskID uint) (string, error
 		}
 	}
 	// mode comes from the group; look it up by order type.
-	groups, _ := s.groups.ListByType(t, task.OrderType)
+	groups, _ := s.groups.ListByType(ctx, t, task.OrderType)
 	mode := model.ApprovalModeAll
 	if len(groups) > 0 {
 		mode = groups[0].Mode
@@ -295,12 +296,12 @@ func (s *ApprovalService) evaluateTx(tx *gorm.DB, t, taskID uint) (string, error
 }
 
 // applyOrderApproval performs the order's own approval side effect.
-func (s *ApprovalService) applyOrderApproval(t uint, task *model.ApprovalTask) error {
+func (s *ApprovalService) applyOrderApproval(ctx context.Context, t uint, task *model.ApprovalTask) error {
 	switch task.OrderType {
 	case model.ApprovalTypePO:
-		return s.poSvc.SetStatus(t, task.OrderID, model.POStatusApproved)
+		return s.poSvc.SetStatus(ctx, t, task.OrderID, model.POStatusApproved)
 	case model.ApprovalTypeSO:
-		_, err := s.soSvc.Approve(t, task.OrderID)
+		_, err := s.soSvc.Approve(ctx, t, task.OrderID)
 		return err
 	}
 	return nil

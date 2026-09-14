@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -23,7 +24,7 @@ func NewPurchaseOrderRepo(db *gormDB) *PurchaseOrderRepo {
 }
 
 // GetWithDetails loads a PO with its details preloaded, scoped to a tenant.
-func (r *PurchaseOrderRepo) GetWithDetails(t, id uint) (*model.PurchaseOrder, error) {
+func (r *PurchaseOrderRepo) GetWithDetails(ctx context.Context, t, id uint) (*model.PurchaseOrder, error) {
 	var po model.PurchaseOrder
 	if err := r.db.DB.Preload("Details").Where("tenant_id = ?", t).First(&po, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -38,7 +39,7 @@ func (r *PurchaseOrderRepo) GetWithDetails(t, id uint) (*model.PurchaseOrder, er
 // header is created with associations omitted so the explicit detail loop
 // below stays the single writer (GORM would otherwise cascade-insert the
 // Details slice and collide on primary keys).
-func (r *PurchaseOrderRepo) CreateWithDetails(t uint, po *model.PurchaseOrder) error {
+func (r *PurchaseOrderRepo) CreateWithDetails(ctx context.Context, t uint, po *model.PurchaseOrder) error {
 	po.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit(clause.Associations).Create(po).Error; err != nil {
@@ -57,7 +58,7 @@ func (r *PurchaseOrderRepo) CreateWithDetails(t uint, po *model.PurchaseOrder) e
 // UpdateWithDetails replaces a PO header and its detail lines in one
 // transaction, scoped to the tenant. Existing lines are wiped first, so an
 // edit is a full replace.
-func (r *PurchaseOrderRepo) UpdateWithDetails(t uint, po *model.PurchaseOrder) error {
+func (r *PurchaseOrderRepo) UpdateWithDetails(ctx context.Context, t uint, po *model.PurchaseOrder) error {
 	po.TenantID = t
 	return r.db.DB.Transaction(func(tx *gorm.DB) error {
 		// 1) drop the old lines for this PO.
@@ -84,7 +85,7 @@ func (r *PurchaseOrderRepo) UpdateWithDetails(t uint, po *model.PurchaseOrder) e
 
 // UpdateColumns applies a selective column update to the PO header only —
 // details, totals, status and received progress stay untouched.
-func (r *PurchaseOrderRepo) UpdateColumns(t, id uint, cols map[string]any) error {
+func (r *PurchaseOrderRepo) UpdateColumns(ctx context.Context, t, id uint, cols map[string]any) error {
 	return r.db.DB.Model(&model.PurchaseOrder{}).
 		Where("id = ? AND tenant_id = ?", id, t).
 		Updates(cols).Error
@@ -154,7 +155,7 @@ func (r *PurchaseReceiptRepo) CreateWithDetailsInTx(tx *gorm.DB, t uint, rc *mod
 }
 
 // ListByPO returns all receipts (with details) of one PO, newest first.
-func (r *PurchaseReceiptRepo) ListByPO(t, poID uint, out *[]model.PurchaseReceipt) error {
+func (r *PurchaseReceiptRepo) ListByPO(ctx context.Context, t, poID uint, out *[]model.PurchaseReceipt) error {
 	return r.db.DB.Preload("Details").
 		Where("tenant_id = ? AND po_id = ?", t, poID).
 		Order("id DESC").

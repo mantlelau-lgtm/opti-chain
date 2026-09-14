@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
@@ -19,7 +20,7 @@ func (r *DemandRepo) List(f ListFilter, out *[]model.Demand, total *int64) error
 
 // SumOpenByMaterial returns total open demand qty per material (map mat->qty)
 // within one tenant.
-func (r *DemandRepo) SumOpenByMaterial(t uint) (map[uint]float64, error) {
+func (r *DemandRepo) SumOpenByMaterial(ctx context.Context, t uint) (map[uint]float64, error) {
 	type row struct {
 		MaterialID uint    `gorm:"column:material_id"`
 		Qty        float64 `gorm:"column:qty"`
@@ -48,7 +49,7 @@ func (r *MrpResultRepo) List(f ListFilter, out *[]model.MrpResult, total *int64)
 }
 
 // BatchCreate stamps the tenant and inserts a computation batch.
-func (r *MrpResultRepo) BatchCreate(t uint, list []model.MrpResult) error {
+func (r *MrpResultRepo) BatchCreate(ctx context.Context, t uint, list []model.MrpResult) error {
 	for i := range list {
 		list[i].TenantID = t
 	}
