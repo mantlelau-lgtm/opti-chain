@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repo"
+	repository "scm/internal/repo"
 )
 
 // ---- Product ----
@@ -23,6 +25,32 @@ func (s *ProductService) Create(ctx context.Context, t uint, m *model.Product) e
 		return errorsBadRequest("product_code/name/unit are required")
 	}
 	return s.repo.Create(ctx, t, m)
+}
+
+// CreateBatch inserts many products inside a single DB transaction —
+// either all succeed or the entire batch is rolled back. Call this whenever
+// the user says "批量导入 / 批量创建产品" — it is strictly preferred over
+// looping product_create N times (which wastes context budget and leaks IDs).
+func (s *ProductService) CreateBatch(ctx context.Context, t uint, list []model.Product) ([]model.Product, error) {
+	if len(list) == 0 {
+		return nil, errorsBadRequest("items is empty")
+	}
+	if len(list) > 500 {
+		return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(list)))
+	}
+	for i := range list {
+		m := &list[i]
+		if m.ProductCode == "" || m.Name == "" || m.Unit == "" {
+			return nil, errorsBadRequest(fmt.Sprintf("product_code/name/unit are required on every item (index %d)", i))
+		}
+		if m.Status == 0 {
+			m.Status = 1
+		}
+	}
+	if err := s.repo.CreateBatch(ctx, t, list); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (s *ProductService) Update(ctx context.Context, t, id uint, m *model.Product) error {

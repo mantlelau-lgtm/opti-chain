@@ -628,6 +628,122 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 		},
 
 		{
+			Name:        "supplier_create",
+			Description: "新建【单条】供应商。仅当 1~2 条时使用；批量创建/批量导入请直接调用 supplier_batch_create（单事务要么全成要么全败，省 token 防卡壳）。",
+			Perm:        "supplier:manage",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supplier_code":  map[string]any{"type": "string", "description": "供应商编码（必填，唯一）"},
+					"name":           map[string]any{"type": "string", "description": "供应商名称（必填）"},
+					"contact_person": map[string]any{"type": "string", "description": "联系人（可选）"},
+					"phone":          map[string]any{"type": "string", "description": "联系电话（可选）"},
+					"address":        map[string]any{"type": "string", "description": "地址（可选）"},
+					"audit_status":   map[string]any{"type": "string", "description": "准入状态 PENDING/APPROVED，默认 PENDING（采购下单前必须 APPROVED）"},
+				},
+				"required": []string{"supplier_code", "name"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				m := &model.Supplier{
+					SupplierCode:  asStr(args, "supplier_code"),
+					Name:          asStr(args, "name"),
+					ContactPerson: asStr(args, "contact_person"),
+					Phone:         asStr(args, "phone"),
+					Address:       asStr(args, "address"),
+					AuditStatus:   asStr(args, "audit_status"),
+					Status:        1,
+				}
+				if m.AuditStatus == "" {
+					m.AuditStatus = model.AuditPending
+				}
+				if err := deps.Suppliers.Create(context.Background(), actor.TenantID, m); err != nil {
+					return nil, err
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:        "supplier_batch_create",
+			Description: "【批量首选】一次性提交多条供应商，单事务保证要么全成要么全回滚。严禁先调 supplier_list 翻页再一条条 supplier_create 反复刷。items 上限 500 条。",
+			Perm:        "supplier:manage",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `供应商数组，每项形如 {"supplier_code":"SUP-001","name":"华东五金","contact_person":"张工","phone":"138...","address":"","audit_status":"PENDING"}。每条必填 supplier_code、name`,
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be non-empty array")
+				}
+				if len(rawItems) > 500 {
+					return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(rawItems)))
+				}
+				list := make([]model.Supplier, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					m := model.Supplier{
+						SupplierCode:  asStr(line, "supplier_code"),
+						Name:          asStr(line, "name"),
+						ContactPerson: asStr(line, "contact_person"),
+						Phone:         asStr(line, "phone"),
+						Address:       asStr(line, "address"),
+						AuditStatus:   asStr(line, "audit_status"),
+						Status:        1,
+					}
+					if m.AuditStatus == "" {
+						m.AuditStatus = model.AuditPending
+					}
+					if m.SupplierCode == "" || m.Name == "" {
+						rawJSON, _ := json.Marshal(line)
+						types := map[string]string{}
+						for k, v := range line {
+							types[k] = fmt.Sprintf("%T", v)
+						}
+						zap.L().Warn("[DBG supplier_batch_create coercion empty]",
+							zap.Int("index", i),
+							zap.String("supplier_code", m.SupplierCode),
+							zap.String("name", m.Name),
+							zap.String("raw_line_json", string(rawJSON)),
+							zap.Any("value_types", types),
+						)
+						return nil, errorsBadRequest(fmt.Sprintf(
+							"items[%d] 缺少必需字段 supplier_code/name（原始值：%s；各字段类型：%v），请补充后再试",
+							i, string(rawJSON), types,
+						))
+					}
+					list = append(list, m)
+				}
+				created, err := deps.Suppliers.CreateBatch(context.Background(), actor.TenantID, list)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]uint, 0, len(created))
+				codes := make([]string, 0, len(created))
+				for _, m := range created {
+					ids = append(ids, m.ID)
+					codes = append(codes, m.SupplierCode)
+				}
+				return map[string]any{
+					"count":      len(created),
+					"ids":        ids,
+					"codes":      codes,
+					"sample":     extractListSample(created[0]),
+					"all_items":  created,
+					"_tx_status": "atomic: all items committed or none",
+				}, nil
+			},
+		},
+
+		{
 			Name:        "material_update",
 			Description: "更新物料。必填 id；其它字段只更新传入的（未传入的保留原值）。",
 			Perm:        "material:manage",
@@ -679,6 +795,114 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 					return nil, err
 				}
 				return m, nil
+			},
+		},
+
+		{
+			Name:        "product_create",
+			Description: "新建【单条】产品。仅当 1~2 条时使用；批量创建/批量导入请直接调用 product_batch_create（单事务要么全成要么全败，省 token 防卡壳）。",
+			Perm:        "bom:edit",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"product_code": map[string]any{"type": "string", "description": "产品编码（必填，唯一）"},
+					"name":         map[string]any{"type": "string", "description": "产品名称（必填）"},
+					"spec":         map[string]any{"type": "string", "description": "规格型号（可选）"},
+					"unit":         map[string]any{"type": "string", "description": "计量单位（必填）"},
+					"cost_price":   map[string]any{"type": "string", "description": "成本价 decimal（可选，默认 0）"},
+				},
+				"required": []string{"product_code", "name", "unit"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				m := &model.Product{
+					ProductCode: asStr(args, "product_code"),
+					Name:        asStr(args, "name"),
+					Spec:        asStr(args, "spec"),
+					Unit:        asStr(args, "unit"),
+					CostPrice:   asDecimal(args["cost_price"]),
+					Status:      1,
+				}
+				if err := deps.Products.Create(context.Background(), actor.TenantID, m); err != nil {
+					return nil, err
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:        "product_batch_create",
+			Description: "【批量首选】一次性提交多条产品，单事务保证要么全成要么全回滚。严禁先调 product_list 翻页再一条条 product_create 反复刷。items 上限 500 条。",
+			Perm:        "bom:edit",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `产品数组，每项形如 {"product_code":"P-001","name":"智能扫地机X1","spec":"黑色 3L","unit":"台","cost_price":"399.5"}。每条必填 product_code、name、unit`,
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be non-empty array")
+				}
+				if len(rawItems) > 500 {
+					return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(rawItems)))
+				}
+				list := make([]model.Product, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					m := model.Product{
+						ProductCode: asStr(line, "product_code"),
+						Name:        asStr(line, "name"),
+						Spec:        asStr(line, "spec"),
+						Unit:        asStr(line, "unit"),
+						CostPrice:   asDecimal(line["cost_price"]),
+						Status:      1,
+					}
+					if m.ProductCode == "" || m.Name == "" || m.Unit == "" {
+						rawJSON, _ := json.Marshal(line)
+						types := map[string]string{}
+						for k, v := range line {
+							types[k] = fmt.Sprintf("%T", v)
+						}
+						zap.L().Warn("[DBG product_batch_create coercion empty]",
+							zap.Int("index", i),
+							zap.String("product_code", m.ProductCode),
+							zap.String("name", m.Name),
+							zap.String("unit", m.Unit),
+							zap.String("raw_line_json", string(rawJSON)),
+							zap.Any("value_types", types),
+						)
+						return nil, errorsBadRequest(fmt.Sprintf(
+							"items[%d] 缺少必需字段 product_code/name/unit（原始值：%s；各字段类型：%v），请补充后再试",
+							i, string(rawJSON), types,
+						))
+					}
+					list = append(list, m)
+				}
+				created, err := deps.Products.CreateBatch(context.Background(), actor.TenantID, list)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]uint, 0, len(created))
+				codes := make([]string, 0, len(created))
+				for _, m := range created {
+					ids = append(ids, m.ID)
+					codes = append(codes, m.ProductCode)
+				}
+				return map[string]any{
+					"count":      len(created),
+					"ids":        ids,
+					"codes":      codes,
+					"sample":     extractListSample(created[0]),
+					"all_items":  created,
+					"_tx_status": "atomic: all items committed or none",
+				}, nil
 			},
 		},
 
@@ -782,6 +1006,350 @@ func registerAssistantTools(deps AssistantDeps) []*AssistantTool {
 					return nil, err
 				}
 				return po, nil
+			},
+		},
+		{
+			Name:        "po_batch_create",
+			Description: "【批量首选】一次性提交多条采购单，所有订单先整体预校验(字段/明细/供应商APPROVED/material_id存在性等)全部通过后，再逐条内部事务创建。严禁先调 po_list 翻页再一条条 po_create 反复刷。items 上限 500 条。",
+			Perm:        "po:create",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `采购单数组，每项同 po_create 单条 schema：{"po_number":"PO24...","supplier_id":123,"order_date":"2024-09-01","expected_delivery":"2024-09-20","details":[{"material_id":1,"order_qty":"100","unit_price":"5.5"}]}。每条必填 supplier_id、details（非空）；supplier 必须已 APPROVED；details 内每条必填 material_id、order_qty>0、unit_price>=0`,
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be non-empty array")
+				}
+				if len(rawItems) > 500 {
+					return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(rawItems)))
+				}
+				inputs := make([]CreatePOInput, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					var details []PODetailInput
+					for _, d := range asArr(line, "details") {
+						row, ok := d.(map[string]any)
+						if !ok {
+							continue
+						}
+						details = append(details, PODetailInput{
+							MaterialID: asUint(row["material_id"]),
+							OrderQty:   asDecimal(row["order_qty"]),
+							UnitPrice:  asDecimal(row["unit_price"]),
+							LocationID: 0,
+						})
+					}
+					orderDate := time.Now()
+					if v := asStr(line, "order_date"); v != "" {
+						if t, err := time.Parse("2006-01-02", v); err == nil {
+							orderDate = t
+						}
+					}
+					var expected *time.Time
+					if v := asStr(line, "expected_delivery"); v != "" {
+						if t, err := time.Parse("2006-01-02", v); err == nil {
+							expected = &t
+						}
+					}
+					inputs = append(inputs, CreatePOInput{
+						PONumber:             asStr(line, "po_number"),
+						SupplierID:           asUint(line["supplier_id"]),
+						OrderDate:            orderDate,
+						ExpectedDeliveryDate: expected,
+						CreatedBy:            actor.Username,
+						Details:              details,
+					})
+				}
+				created, meta, err := deps.POs.CreateBatch(context.Background(), actor.TenantID, inputs)
+				if err != nil {
+					res := map[string]any{
+						"error":         err.Error(),
+						"success_ids":   make([]uint, 0),
+						"success_count": meta.SuccessCount,
+					}
+					if meta.FailedIndex >= 0 {
+						res["failed_index"] = meta.FailedIndex
+						res["failed_error"] = meta.FailedErr
+					}
+					for _, p := range created {
+						res["success_ids"] = append(res["success_ids"].([]uint), p.ID)
+					}
+					return res, err
+				}
+				ids := make([]uint, 0, len(created))
+				poNums := make([]string, 0, len(created))
+				for _, p := range created {
+					ids = append(ids, p.ID)
+					poNums = append(poNums, p.PONumber)
+				}
+				return map[string]any{
+					"count":         len(created),
+					"ids":           ids,
+					"po_numbers":    poNums,
+					"sample":        extractListSample(created[0]),
+					"all_items":     created,
+					"_tx_semantics": "pre-validate ALL rows atomically; then per-order transaction. No rows written if any row fails validation in Pass 1.",
+					"success_count": meta.SuccessCount,
+				}, nil
+			},
+		},
+		{
+			Name:        "customer_create",
+			Description: "新建【单条】客户。仅当 1~2 条时使用；批量创建/批量导入请直接调用 customer_batch_create（单事务要么全成要么全败，省 token 防卡壳）。",
+			Perm:        "customer:manage",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"customer_code":  map[string]any{"type": "string", "description": "客户编码（必填，唯一）"},
+					"name":           map[string]any{"type": "string", "description": "客户名称（必填）"},
+					"contact_person": map[string]any{"type": "string", "description": "联系人（可选）"},
+					"phone":          map[string]any{"type": "string", "description": "手机号（查物流顺丰接口用，必须真实手机号，否则物流查询将无结果）"},
+					"address":        map[string]any{"type": "string", "description": "地址（可选）"},
+					"credit_limit":   map[string]any{"type": "string", "description": "信用额度 decimal（可选，默认 0）"},
+					"audit_status":   map[string]any{"type": "string", "description": "准入状态 PENDING/APPROVED，默认 PENDING（销售下单前必须 APPROVED）"},
+				},
+				"required": []string{"customer_code", "name"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				m := &model.Customer{
+					CustomerCode:  asStr(args, "customer_code"),
+					Name:          asStr(args, "name"),
+					ContactPerson: asStr(args, "contact_person"),
+					Phone:         asStr(args, "phone"),
+					CreditLimit:   asDecimal(args["credit_limit"]),
+					AuditStatus:   asStr(args, "audit_status"),
+					Status:        1,
+				}
+				if m.AuditStatus == "" {
+					m.AuditStatus = model.AuditPending
+				}
+				if err := deps.Customers.Create(context.Background(), actor.TenantID, m); err != nil {
+					return nil, err
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:        "customer_batch_create",
+			Description: "【批量首选】一次性提交多条客户，单事务保证要么全成要么全回滚。严禁先调 customer_list 翻页再一条条 customer_create 反复刷。items 上限 500 条。注意：phone 字段必须是真实手机号，否则后续销售订单物流查询将无结果。",
+			Perm:        "customer:manage",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `客户数组，每项形如 {"customer_code":"CUST-001","name":"北京XX科技","contact_person":"李总","phone":"13800001111","address":"北京市朝阳区...","credit_limit":"500000","audit_status":"APPROVED"}。每条必填 customer_code、name；phone 强烈建议填真实手机号以支持顺丰物流查询`,
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be non-empty array")
+				}
+				if len(rawItems) > 500 {
+					return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(rawItems)))
+				}
+				list := make([]model.Customer, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					m := model.Customer{
+						CustomerCode:  asStr(line, "customer_code"),
+						Name:          asStr(line, "name"),
+						ContactPerson: asStr(line, "contact_person"),
+						Phone:         asStr(line, "phone"),
+						CreditLimit:   asDecimal(line["credit_limit"]),
+						AuditStatus:   asStr(line, "audit_status"),
+						Status:        1,
+					}
+					if m.AuditStatus == "" {
+						m.AuditStatus = model.AuditPending
+					}
+					if m.CustomerCode == "" || m.Name == "" {
+						rawJSON, _ := json.Marshal(line)
+						types := map[string]string{}
+						for k, v := range line {
+							types[k] = fmt.Sprintf("%T", v)
+						}
+						zap.L().Warn("[DBG customer_batch_create coercion empty]",
+							zap.Int("index", i),
+							zap.String("customer_code", m.CustomerCode),
+							zap.String("name", m.Name),
+							zap.String("raw_line_json", string(rawJSON)),
+							zap.Any("value_types", types),
+						)
+						return nil, errorsBadRequest(fmt.Sprintf(
+							"items[%d] 缺少必需字段 customer_code/name（原始值：%s；各字段类型：%v），请补充后再试",
+							i, string(rawJSON), types,
+						))
+					}
+					list = append(list, m)
+				}
+				created, err := deps.Customers.CreateBatch(context.Background(), actor.TenantID, list)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]uint, 0, len(created))
+				codes := make([]string, 0, len(created))
+				for _, m := range created {
+					ids = append(ids, m.ID)
+					codes = append(codes, m.CustomerCode)
+				}
+				return map[string]any{
+					"count":      len(list),
+					"ids":        ids,
+					"codes":      codes,
+					"sample":     extractListSample(list[0]),
+					"all_items":  list,
+					"_tx_status": "atomic: all items committed or none",
+				}, nil
+			},
+		},
+		{
+			Name:        "so_create",
+			Description: "新建销售订单（开单）。必填 customer_id（须 APPROVED）和 details 明细数组；details 每项：material_id、qty（数量）、unit_price（单价）。",
+			Perm:        "so:create",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"so_number":   map[string]any{"type": "string", "description": "销售单号，留空自动生成"},
+					"customer_id": map[string]any{"type": "integer", "description": "客户 ID"},
+					"order_date":  map[string]any{"type": "string", "description": "下单日期 YYYY-MM-DD（可选，默认今天）"},
+					"details":     map[string]any{"type": "array", "description": `明细数组，每项形如 {"material_id":1,"qty":"100","unit_price":"9.9"}`},
+				},
+				"required": []string{"customer_id", "details"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				var details []SODetailInput
+				for _, it := range asArr(args, "details") {
+					line, ok := it.(map[string]any)
+					if !ok {
+						continue
+					}
+					details = append(details, SODetailInput{
+						MaterialID: asUint(line["material_id"]),
+						Qty:        asDecimal(line["qty"]),
+						UnitPrice:  asDecimal(line["unit_price"]),
+					})
+				}
+				orderDate := time.Now()
+				if v := asStr(args, "order_date"); v != "" {
+					if t, err := time.Parse("2006-01-02", v); err == nil {
+						orderDate = t
+					}
+				}
+				so, err := deps.SOs.Create(context.Background(), actor.TenantID, CreateSOInput{
+					SONumber:   asStr(args, "so_number"),
+					CustomerID: asUint(args["customer_id"]),
+					OrderDate:  orderDate,
+					CreatedBy:  actor.Username,
+					Details:    details,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return so, nil
+			},
+		},
+		{
+			Name:        "so_batch_create",
+			Description: "【批量首选】一次性提交多条销售订单，所有订单先整体预校验（字段/明细/material_id存在/customer APPROVED 等）全部通过后，再逐条内部事务创建。严禁先调 so_list 翻页再一条条 so_create 反复刷。items 上限 500 条。",
+			Perm:        "so:create",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type":        "array",
+						"description": `销售单数组，每项同 so_create 单条 schema：{"so_number":"SO24...","customer_id":456,"order_date":"2024-09-01","details":[{"material_id":1,"qty":"50","unit_price":"12"}]}。每条必填 customer_id、details（非空）；customer 必须已 APPROVED；details 每条必填 material_id、qty>0、unit_price>=0`,
+					},
+				},
+				"required": []string{"items"},
+			},
+			Exec: func(actor *authx.Actor, args map[string]any) (any, error) {
+				rawItems := asArr(args, "items")
+				if len(rawItems) == 0 {
+					return nil, errorsBadRequest("items is required and must be non-empty array")
+				}
+				if len(rawItems) > 500 {
+					return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(rawItems)))
+				}
+				inputs := make([]CreateSOInput, 0, len(rawItems))
+				for i, it := range rawItems {
+					line, ok := it.(map[string]any)
+					if !ok {
+						return nil, errorsBadRequest(fmt.Sprintf("items[%d] is not an object", i))
+					}
+					var details []SODetailInput
+					for _, d := range asArr(line, "details") {
+						row, ok := d.(map[string]any)
+						if !ok {
+							continue
+						}
+						details = append(details, SODetailInput{
+							MaterialID: asUint(row["material_id"]),
+							Qty:        asDecimal(row["qty"]),
+							UnitPrice:  asDecimal(row["unit_price"]),
+						})
+					}
+					orderDate := time.Now()
+					if v := asStr(line, "order_date"); v != "" {
+						if t, err := time.Parse("2006-01-02", v); err == nil {
+							orderDate = t
+						}
+					}
+					inputs = append(inputs, CreateSOInput{
+						SONumber:   asStr(line, "so_number"),
+						CustomerID: asUint(line["customer_id"]),
+						OrderDate:  orderDate,
+						CreatedBy:  actor.Username,
+						Details:    details,
+					})
+				}
+				created, meta, err := deps.SOs.CreateBatch(context.Background(), actor.TenantID, inputs)
+				if err != nil {
+					res := map[string]any{
+						"error":         err.Error(),
+						"success_ids":   make([]uint, 0),
+						"success_count": meta.SuccessCount,
+					}
+					if meta.FailedIndex >= 0 {
+						res["failed_index"] = meta.FailedIndex
+						res["failed_error"] = meta.FailedErr
+					}
+					for _, s := range created {
+						res["success_ids"] = append(res["success_ids"].([]uint), s.ID)
+					}
+					return res, err
+				}
+				ids := make([]uint, 0, len(created))
+				soNums := make([]string, 0, len(created))
+				for _, s := range created {
+					ids = append(ids, s.ID)
+					soNums = append(soNums, s.SONumber)
+				}
+				return map[string]any{
+					"count":         len(created),
+					"ids":           ids,
+					"so_numbers":    soNums,
+					"sample":        extractListSample(created[0]),
+					"all_items":     created,
+					"_tx_semantics": "pre-validate ALL rows atomically; then per-order transaction. No rows written if any row fails Pass 1 validation.",
+					"success_count": meta.SuccessCount,
+				}, nil
 			},
 		},
 	}

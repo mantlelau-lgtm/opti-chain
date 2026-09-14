@@ -2,13 +2,14 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"scm/internal/model"
-	"scm/internal/repo"
+	repository "scm/internal/repo"
 )
 
 // ---- Customer ----
@@ -25,6 +26,34 @@ func (s *CustomerService) Create(ctx context.Context, t uint, m *model.Customer)
 		return errorsBadRequest("customer_code/name are required")
 	}
 	return s.repo.Create(ctx, t, m)
+}
+
+// CreateBatch inserts many customers in a single DB transaction —
+// either all succeed or the entire batch is rolled back. Prefer this over
+// looping customer_create N times when the user says "批量导入客户 / 批量创建客户".
+func (s *CustomerService) CreateBatch(ctx context.Context, t uint, list []model.Customer) ([]model.Customer, error) {
+	if len(list) == 0 {
+		return nil, errorsBadRequest("items is empty")
+	}
+	if len(list) > 500 {
+		return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(list)))
+	}
+	for i := range list {
+		m := &list[i]
+		if m.CustomerCode == "" || m.Name == "" {
+			return nil, errorsBadRequest(fmt.Sprintf("customer_code/name are required on every item (index %d)", i))
+		}
+		if m.AuditStatus == "" {
+			m.AuditStatus = model.AuditPending
+		}
+		if m.Status == 0 {
+			m.Status = 1
+		}
+	}
+	if err := s.repo.CreateBatch(ctx, t, list); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (s *CustomerService) Update(ctx context.Context, t, id uint, m *model.Customer) error {
@@ -148,6 +177,79 @@ func (s *SalesOrderService) Create(ctx context.Context, t uint, in CreateSOInput
 		return nil, err
 	}
 	return s.repo.GetWithDetails(ctx, t, so.ID)
+}
+
+// CreateBatch creates multiple sales orders. Like Purchase orders, each SO
+// owns sub-objects (details + totals) and its own stock/credit lifecycle,
+// so we cannot use a raw tenantRepo.CreateBatch. The two-pass strategy
+// mirrors CreateBatch in PurchaseOrderService:
+//
+//  1. PASS 1 — pre-validate every row structurally (customer_id + details
+//     non-empty, customer exists + APPROVED, line qty>0, unit_price>=0).
+//     The row that fails is reported deterministically by index — no rows
+//     have been written yet.
+//  2. PASS 2 — insert sequentially by calling Create (its own transaction,
+//     totals + cascading detail insert correct, same as UI path).
+//
+// Transactions are per-SO; if row N fails after N-1 have committed, the
+// result carries SuccessCount + FailedIndex so the agent can re-submit
+// only the failed tail.
+type CreateBatchSOResult struct {
+	SuccessCount int
+	FailedIndex  int
+	FailedErr    string
+}
+
+func (s *SalesOrderService) CreateBatch(ctx context.Context, t uint, inputs []CreateSOInput) ([]model.SaleOrder, CreateBatchSOResult, error) {
+	if len(inputs) == 0 {
+		return nil, CreateBatchSOResult{}, errorsBadRequest("items is empty")
+	}
+	if len(inputs) > 500 {
+		return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(inputs)))
+	}
+	// Pass 1 — structural validation
+	for i := range inputs {
+		in := &inputs[i]
+		if in.CustomerID == 0 || len(in.Details) == 0 {
+			return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: customer_id and at least one detail are required", i))
+		}
+		cust, err := s.customers.Get(ctx, t, in.CustomerID)
+		if err != nil {
+			return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: load customer %d failed: %v", i, in.CustomerID, err))
+		}
+		if cust == nil {
+			return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: customer_id=%d not found", i, in.CustomerID))
+		}
+		if cust.AuditStatus != model.AuditApproved {
+			return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: customer_id=%d not APPROVED (audit_status=%s)", i, in.CustomerID, cust.AuditStatus))
+		}
+		for lineIdx, d := range in.Details {
+			if d.MaterialID == 0 {
+				return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: material_id is required", i, lineIdx))
+			}
+			if d.Qty.LessThanOrEqual(decimal.Zero) {
+				return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: qty must be positive", i, lineIdx))
+			}
+			if d.UnitPrice.IsNegative() {
+				return nil, CreateBatchSOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: unit_price must be >= 0", i, lineIdx))
+			}
+		}
+	}
+	// Pass 2 — create sequentially
+	results := make([]model.SaleOrder, 0, len(inputs))
+	for i := range inputs {
+		in := inputs[i]
+		so, err := s.Create(ctx, t, in)
+		if err != nil {
+			return results, CreateBatchSOResult{
+				SuccessCount: len(results),
+				FailedIndex:  i,
+				FailedErr:    err.Error(),
+			}, err
+		}
+		results = append(results, *so)
+	}
+	return results, CreateBatchSOResult{SuccessCount: len(results)}, nil
 }
 
 func (s *SalesOrderService) Get(ctx context.Context, t, id uint) (*model.SaleOrder, error) {

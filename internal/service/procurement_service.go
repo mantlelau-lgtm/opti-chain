@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/shopspring/decimal"
 
 	"scm/internal/model"
-	"scm/internal/repo"
+	repository "scm/internal/repo"
 )
 
 // PurchaseOrderService owns purchase-order lifecycle logic. Every method
@@ -83,6 +84,80 @@ func (s *PurchaseOrderService) Create(ctx context.Context, t uint, in CreatePOIn
 		return nil, err
 	}
 	return s.repo.GetWithDetails(ctx, t, po.ID)
+}
+
+// CreateBatch creates multiple purchase orders. Since each PO carries its
+// own sub-object (details array, totals computation, repo-level cascading
+// insert + received_qty state), we cannot blindly drop them into a raw
+// repo.CreateBatch. Instead:
+//
+//  1. ALL inputs are pre-validated structurally (fields, detail lines,
+//     supplier existence + APPROVED) up-front — the caller is guaranteed a
+//     deterministic, row-indexed error report or a fully clean batch.
+//  2. Once validation passes, each PO is inserted sequentially by calling
+//     Create (single-PO transaction, same as the UI path) so totals and
+//     cascading detail inserts stay correct.
+//
+// Since the transactions are per-PO, a failure on the Nth PO after N-1
+// have been written is signalled explicitly via the result; the caller
+// should treat the batch as "partial success" and re-submit only the
+// failed tail.
+type CreateBatchPOResult struct {
+	SuccessCount int
+	FailedIndex  int
+	FailedErr    string
+}
+
+func (s *PurchaseOrderService) CreateBatch(ctx context.Context, t uint, inputs []CreatePOInput) ([]model.PurchaseOrder, CreateBatchPOResult, error) {
+	if len(inputs) == 0 {
+		return nil, CreateBatchPOResult{}, errorsBadRequest("items is empty")
+	}
+	if len(inputs) > 500 {
+		return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(inputs)))
+	}
+	// Pass 1 — structural validation (row-indexed, deterministic, no writes).
+	for i := range inputs {
+		in := &inputs[i]
+		if in.SupplierID == 0 || len(in.Details) == 0 {
+			return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: supplier_id and at least one detail are required", i))
+		}
+		supplier, err := s.suppliers.Get(ctx, t, in.SupplierID)
+		if err != nil {
+			return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: load supplier %d failed: %v", i, in.SupplierID, err))
+		}
+		if supplier == nil {
+			return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: supplier_id=%d not found", i, in.SupplierID))
+		}
+		if supplier.AuditStatus != model.AuditApproved {
+			return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d]: supplier_id=%d not APPROVED (audit_status=%s)", i, in.SupplierID, supplier.AuditStatus))
+		}
+		for lineIdx, d := range in.Details {
+			if d.MaterialID == 0 {
+				return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: material_id is required", i, lineIdx))
+			}
+			if d.OrderQty.LessThanOrEqual(decimal.Zero) {
+				return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: order_qty must be positive", i, lineIdx))
+			}
+			if d.UnitPrice.IsNegative() {
+				return nil, CreateBatchPOResult{}, errorsBadRequest(fmt.Sprintf("items[%d].details[%d]: unit_price must be >= 0", i, lineIdx))
+			}
+		}
+	}
+	// Pass 2 — create sequentially, each within its own transaction.
+	results := make([]model.PurchaseOrder, 0, len(inputs))
+	for i := range inputs {
+		in := inputs[i]
+		po, err := s.Create(ctx, t, in)
+		if err != nil {
+			return results, CreateBatchPOResult{
+				SuccessCount: len(results),
+				FailedIndex:  i,
+				FailedErr:    err.Error(),
+			}, err
+		}
+		results = append(results, *po)
+	}
+	return results, CreateBatchPOResult{SuccessCount: len(results)}, nil
 }
 
 // UpdateHeader edits only the header fields supplied by the caller; details,

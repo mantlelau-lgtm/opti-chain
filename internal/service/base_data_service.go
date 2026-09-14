@@ -103,6 +103,35 @@ func (s *SupplierService) Create(ctx context.Context, t uint, m *model.Supplier)
 	return s.repo.Create(ctx, t, m)
 }
 
+// CreateBatch inserts many suppliers inside a single DB transaction —
+// either all succeed or the entire batch is rolled back. This is the
+// preferred entry point whenever the user asks for "批量导入 / 批量创建 /
+// 批量写入供应商".
+func (s *SupplierService) CreateBatch(ctx context.Context, t uint, list []model.Supplier) ([]model.Supplier, error) {
+	if len(list) == 0 {
+		return nil, errorsBadRequest("items is empty")
+	}
+	if len(list) > 500 {
+		return nil, errorsBadRequest(fmt.Sprintf("batch size exceeds 500: got %d", len(list)))
+	}
+	for i := range list {
+		m := &list[i]
+		if m.SupplierCode == "" || m.Name == "" {
+			return nil, errorsBadRequest(fmt.Sprintf("supplier_code/name are required on every item (index %d)", i))
+		}
+		if m.AuditStatus == "" {
+			m.AuditStatus = model.AuditPending
+		}
+		if m.Status == 0 {
+			m.Status = 1
+		}
+	}
+	if err := s.repo.CreateBatch(ctx, t, list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 func (s *SupplierService) Update(ctx context.Context, t, id uint, m *model.Supplier) error {
 	old, err := s.repo.Get(ctx, t, id)
 	if old == nil {
