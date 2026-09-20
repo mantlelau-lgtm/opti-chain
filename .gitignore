@@ -7,9 +7,11 @@
 *.out
 bin/
 dist/
-# Project built binaries (from go build ./cmd/...)
-server
-scm-mcp
+# Project built binaries (from go build ./cmd/...). Anchored to the repo root:
+# unanchored these also match the cmd/server/ and cmd/scm-mcp/ source dirs,
+# silently ignoring any new file added there.
+/server
+/scm-mcp
 
 # Runtime user uploads (default ./uploads)
 uploads/
