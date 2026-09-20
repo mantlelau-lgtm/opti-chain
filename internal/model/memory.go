@@ -2,24 +2,11 @@ package model
 
 import "time"
 
-// AssistantMemory is a short-term conversation turn. Every user→assistant
-// round is stored here; the last N rounds are fed back into the next Chat
-// as immediate context.
-type AssistantMemory struct {
-	BaseModel
-	TenantID            uint   `gorm:"column:tenant_id;not null;index"`
-	UserID              uint   `gorm:"column:user_id;not null;index"`
-	AgentRole           string `gorm:"column:agent_role;size:64"`
-	AgentName           string `gorm:"column:agent_name;size:64"`
-	UserMessage         string `gorm:"column:user_message;type:text;not null"`
-	UserAttachmentsJSON string `gorm:"column:user_attachments_json;type:text"` // JSON array of attachments
-	AssistantReply      string `gorm:"column:assistant_reply;type:text"`
-	AssistantUsageJSON  string `gorm:"column:assistant_usage_json;type:text"`  // JSON AssistantUsage
-	ToolCalls           string `gorm:"column:tool_calls;size:1024"`            // JSON array of tool names
-	Consolidated        bool   `gorm:"column:consolidated;default:false"`      // extracted to long-term graph
-}
-
-func (AssistantMemory) TableName() string { return "sys_assistant_memory" }
+// Conversation turns are no longer stored in the database: they live in
+// JSONL files under the configured memory data dir (see internal/memory).
+// The tables below back the long-term knowledge graph only.
+//
+// The legacy sys_assistant_memory table is drained by cmd/migrate-memory.
 
 // MemoryNode is an entity node in the user's personal knowledge graph.
 // NodeType identifies the kind (e.g. MATERIAL, SUPPLIER); EntityID links

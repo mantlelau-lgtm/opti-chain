@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
-	"scm/internal/model"
 	repository "scm/internal/repo"
 	"scm/pkg/authx"
 	"scm/pkg/llmclient"
@@ -18,8 +18,8 @@ import (
 // Default values used when Config fields are zero.
 const (
 	defaultWindowSize          = 10
+	defaultHistoryLimit        = 100
 	defaultConsolidateInterval = 5
-	defaultShortTermKeepTurns  = 100
 	defaultDecayInterval       = 24 * time.Hour
 	defaultDecayAgeDays        = 7
 	defaultDecayFactor         = 0.9
@@ -66,13 +66,9 @@ type DecayConfig struct {
 
 // Config tunes the memory module.
 type Config struct {
-	WindowSize          int // recent turns to return (default 10)
+	WindowSize          int // recent turns injected into the LLM context (default 10)
+	HistoryLimit        int // recent turns returned to the chat UI (default 100)
 	ConsolidateInterval int // unconsolidated turns before triggering extraction (default 5)
-	// ShortTermKeepTurns is how many recent turns to keep per user when
-	// trimming old rows. 0 defaults to 100. This is the "short-term memory
-	// compression" policy: Store() calls TrimOldTurnsKeepRecent after
-	// every insert so the table never grows unbounded.
-	ShortTermKeepTurns int
 	// Decay controls the long-term edge-weight decay loop (optional).
 	// If Decay.Interval < 0 the loop is disabled; StartDecayLoop will
 	// return immediately without starting any goroutine.
@@ -81,17 +77,23 @@ type Config struct {
 
 // Service is the memory module. It is independent of the assistant and can
 // be used by any caller that holds an actor.
+//
+// Conversation turns live in JSONL files (see JSONLStore); only the long-term
+// knowledge graph is backed by the database.
 type Service struct {
-	mem  *repository.AssistantMemoryRepo
-	node *repository.MemoryNodeRepo
-	edge *repository.MemoryEdgeRepo
-	prof *repository.MemoryProfileRepo
-	llm  *llmclient.Client
-	cfg  Config
+	store *JSONLStore
+	node  *repository.MemoryNodeRepo
+	edge  *repository.MemoryEdgeRepo
+	prof  *repository.MemoryProfileRepo
+	llm   *llmclient.Client
+	cfg   Config
+	// consolidating guards against overlapping extraction runs for the same
+	// user; consolidate() is launched from a goroutine per Store().
+	consolidating sync.Map // uint64(tenant<<32|user) -> struct{}
 }
 
 func NewService(
-	mem *repository.AssistantMemoryRepo,
+	store *JSONLStore,
 	node *repository.MemoryNodeRepo,
 	edge *repository.MemoryEdgeRepo,
 	prof *repository.MemoryProfileRepo,
@@ -101,11 +103,11 @@ func NewService(
 	if cfg.WindowSize <= 0 {
 		cfg.WindowSize = defaultWindowSize
 	}
+	if cfg.HistoryLimit <= 0 {
+		cfg.HistoryLimit = defaultHistoryLimit
+	}
 	if cfg.ConsolidateInterval <= 0 {
 		cfg.ConsolidateInterval = defaultConsolidateInterval
-	}
-	if cfg.ShortTermKeepTurns <= 0 {
-		cfg.ShortTermKeepTurns = defaultShortTermKeepTurns
 	}
 	if cfg.Decay.Interval == 0 {
 		cfg.Decay.Interval = defaultDecayInterval
@@ -119,43 +121,58 @@ func NewService(
 	if cfg.Decay.Floor <= 0 {
 		cfg.Decay.Floor = defaultDecayFloor
 	}
-	return &Service{mem: mem, node: node, edge: edge, prof: prof, llm: llm, cfg: cfg}
+	return &Service{store: store, node: node, edge: edge, prof: prof, llm: llm, cfg: cfg}
 }
 
-// Store saves a conversation turn and triggers consolidation if the
-// unconsolidated count exceeds the threshold. It also trims old short-term
-// turns per (ShortTermKeepTurns) so memory never grows unbounded.
+// Store appends a conversation turn to the user's JSONL log and triggers
+// consolidation once enough unconsolidated turns have accumulated. It never
+// returns an error: memory is best-effort and must not break the chat.
 func (s *Service) Store(ctx context.Context, actor *authx.Actor,
 	agentRole, agentName, message, userAttachmentsJSON, reply, assistantUsageJSON, toolCalls string) {
 	if actor == nil || actor.UserID == 0 {
 		return
 	}
-	entry := model.AssistantMemory{
-		TenantID: actor.TenantID, UserID: actor.UserID,
-		AgentRole: agentRole, AgentName: agentName,
-		UserMessage: message, UserAttachmentsJSON: userAttachmentsJSON,
-		AssistantReply: reply, AssistantUsageJSON: assistantUsageJSON,
-		ToolCalls: toolCalls,
+	rec := Turn{
+		AgentRole:   agentRole,
+		AgentName:   agentName,
+		UserMessage: message,
+		Attachments: RawJSON(userAttachmentsJSON),
+		Reply:       reply,
+		Usage:       RawJSON(assistantUsageJSON),
+		ToolCalls:   toolCalls,
 	}
-	if err := s.mem.Create(&entry); err != nil {
-		return // best-effort; don't fail the chat for memory
-	}
-
-	// Trim old turns synchronously — best-effort, non-blocking even if slow.
-	if deleted, err := s.mem.TrimOldTurnsKeepRecent(ctx, actor.TenantID, actor.UserID, s.cfg.ShortTermKeepTurns); err == nil && deleted > 0 {
-		zap.L().Info("[memory trim] old short-term turns removed",
+	if err := s.store.Append(ctx, actor.TenantID, actor.UserID, rec); err != nil {
+		zap.L().Warn("[memory] append turn failed",
 			zap.Uint("tenant_id", actor.TenantID),
 			zap.Uint("user_id", actor.UserID),
-			zap.Int64("deleted", deleted),
-			zap.Int("keep", s.cfg.ShortTermKeepTurns),
+			zap.Error(err),
 		)
+		return
 	}
 
 	// Trigger consolidation if enough unconsolidated turns have accumulated.
 	// Run in a goroutine so it doesn't block the chat response.
-	if n, _ := s.mem.UnconsolidatedCount(ctx, actor.TenantID, actor.UserID); n >= int64(s.cfg.ConsolidateInterval) {
-		go s.consolidate(ctx, actor)
+	if pending, _, err := s.store.Unconsolidated(ctx, actor.TenantID, actor.UserID); err == nil &&
+		len(pending) >= s.cfg.ConsolidateInterval {
+		go s.consolidate(actor)
 	}
+}
+
+// RawJSON embeds an already-serialised payload as nested JSON so the log stays
+// readable by jq. Anything that is not valid JSON is stored as a JSON string
+// rather than corrupting the record.
+func RawJSON(s string) json.RawMessage {
+	if s == "" {
+		return nil
+	}
+	if json.Valid([]byte(s)) {
+		return json.RawMessage(s)
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // RunDecayOnce applies one pass of the edge decay algorithm. It's safe to
@@ -204,35 +221,14 @@ func (s *Service) StartDecayLoop(parentCtx context.Context) {
 	}()
 }
 
-// Retrieve returns the two-layer memory context for the user.
+// Retrieve returns the two-layer memory context for the user. The short-term
+// layer is sized by WindowSize, which is deliberately smaller than what
+// History() serves: this output is injected into the LLM prompt, so it trades
+// recall for token cost.
 func (s *Service) Retrieve(ctx context.Context, actor *authx.Actor) *RetrieveResult {
-	// Short-term: last N turns, reversed to chronological order.
-	turns, _ := s.mem.ListRecent(ctx, actor.TenantID, actor.UserID, s.cfg.WindowSize)
-	var short []ShortTermEntry
-	for i := len(turns) - 1; i >= 0; i-- {
-		t := turns[i]
-		ts := t.CreatedAt
-		userEntry := ShortTermEntry{Role: "user", Content: t.UserMessage, Timestamp: ts}
-		if t.UserAttachmentsJSON != "" {
-			userEntry.Attachments = json.RawMessage(t.UserAttachmentsJSON)
-		}
-		short = append(short, userEntry)
-		content := t.AssistantReply
-		// If the reply was a tool-only round, summarise instead of replaying.
-		if content == "" && t.ToolCalls != "" {
-			content = "(调用了工具: " + t.ToolCalls + ")"
-		}
-		if content != "" {
-			ass := ShortTermEntry{Role: "assistant", Content: content, ToolCalls: t.ToolCalls, Timestamp: ts}
-			if t.AgentName != "" {
-				ass.AgentName = t.AgentName
-			}
-			if t.AssistantUsageJSON != "" {
-				ass.Usage = json.RawMessage(t.AssistantUsageJSON)
-			}
-			short = append(short, ass)
-		}
-	}
+	// Short-term: last WindowSize turns, already in chronological order.
+	turns, _ := s.store.Tail(ctx, actor.TenantID, actor.UserID, s.cfg.WindowSize)
+	short := toShortTerm(turns)
 
 	// Long-term: profile + top facts from the knowledge graph.
 	var ltc LongTermContext
@@ -259,10 +255,67 @@ func (s *Service) Retrieve(ctx context.Context, actor *authx.Actor) *RetrieveRes
 	return &RetrieveResult{ShortTerm: short, LongTerm: ltc}
 }
 
-// Clear removes all memory (short-term + long-term) for the user.
+// History returns turns for chat-UI replay. It is deliberately decoupled from
+// WindowSize: the UI wants as much of the transcript as it can render, while
+// the LLM prompt only gets a narrow window. limit <= 0 falls back to
+// Config.HistoryLimit.
+func (s *Service) History(ctx context.Context, actor *authx.Actor, limit int) []ShortTermEntry {
+	if actor == nil || actor.UserID == 0 {
+		return nil
+	}
+	if limit <= 0 {
+		limit = s.cfg.HistoryLimit
+	}
+	turns, err := s.store.Tail(ctx, actor.TenantID, actor.UserID, limit)
+	if err != nil {
+		zap.L().Warn("[memory] read history failed",
+			zap.Uint("tenant_id", actor.TenantID),
+			zap.Uint("user_id", actor.UserID),
+			zap.Error(err),
+		)
+		return nil
+	}
+	return toShortTerm(turns)
+}
+
+// toShortTerm expands each stored round into the user/assistant message pair
+// the chat protocol expects. turns must already be in chronological order.
+func toShortTerm(turns []Turn) []ShortTermEntry {
+	var short []ShortTermEntry
+	for _, t := range turns {
+		userEntry := ShortTermEntry{Role: "user", Content: t.UserMessage, Timestamp: t.CreatedAt}
+		if len(t.Attachments) > 0 {
+			userEntry.Attachments = t.Attachments
+		}
+		short = append(short, userEntry)
+
+		content := t.Reply
+		// If the reply was a tool-only round, summarise instead of replaying.
+		if content == "" && t.ToolCalls != "" {
+			content = "(调用了工具: " + t.ToolCalls + ")"
+		}
+		if content == "" {
+			continue
+		}
+		ass := ShortTermEntry{Role: "assistant", Content: content, ToolCalls: t.ToolCalls, Timestamp: t.CreatedAt}
+		if t.AgentName != "" {
+			ass.AgentName = t.AgentName
+		}
+		if len(t.Usage) > 0 {
+			ass.Usage = t.Usage
+		}
+		short = append(short, ass)
+	}
+	return short
+}
+
+// Clear removes all memory (JSONL history + long-term graph) for the user.
 func (s *Service) Clear(ctx context.Context, actor *authx.Actor) error {
 	t, u := actor.TenantID, actor.UserID
-	_ = s.mem.DeleteByUser(ctx, t, u)
+	if err := s.store.Delete(ctx, t, u); err != nil {
+		zap.L().Warn("[memory] delete history failed",
+			zap.Uint("tenant_id", t), zap.Uint("user_id", u), zap.Error(err))
+	}
 	_ = s.edge.DeleteByUser(ctx, t, u)
 	_ = s.node.DeleteByUser(ctx, t, u)
 	_ = s.prof.DeleteByUser(ctx, t, u)
@@ -271,8 +324,20 @@ func (s *Service) Clear(ctx context.Context, actor *authx.Actor) error {
 
 // consolidate runs the LLM extraction over unconsolidated turns and updates
 // the knowledge graph. It is called asynchronously from Store.
-func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
-	turns, err := s.mem.ListUnconsolidated(ctx, actor.TenantID, actor.UserID)
+func (s *Service) consolidate(actor *authx.Actor) {
+	// One extraction per user at a time: Store() can fire several goroutines
+	// before the first LLM call returns, and re-extracting the same turns
+	// would inflate every edge weight.
+	key := uint64(actor.TenantID)<<32 | uint64(actor.UserID)
+	if _, busy := s.consolidating.LoadOrStore(key, struct{}{}); busy {
+		return
+	}
+	defer s.consolidating.Delete(key)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	turns, watermark, err := s.store.Unconsolidated(ctx, actor.TenantID, actor.UserID)
 	if err != nil || len(turns) == 0 {
 		return
 	}
@@ -281,7 +346,7 @@ func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
 	var b strings.Builder
 	for _, t := range turns {
 		b.WriteString("用户: " + t.UserMessage + "\n")
-		b.WriteString("助手: " + t.AssistantReply + "\n")
+		b.WriteString("助手: " + t.Reply + "\n")
 		if t.ToolCalls != "" {
 			b.WriteString("工具调用: " + t.ToolCalls + "\n")
 		}
@@ -297,9 +362,6 @@ func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
 
 对话:
 %s`, b.String())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	resp, err := s.llm.Chat(ctx, []llmclient.Message{
 		{Role: "system", Content: "你是一个知识提取器。只返回 JSON，不要任何其他文字。"},
@@ -349,7 +411,6 @@ func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
 	}
 
 	// Upsert edges.
-	now := time.Now()
 	for _, e := range extract.Edges {
 		fromID, ok1 := nodeByLabel[e.From]
 		toID, ok2 := nodeByLabel[e.To]
@@ -362,9 +423,6 @@ func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
 		_ = s.edge.Upsert(ctx, actor.TenantID, actor.UserID, fromID, toID, e.Relation, e.Weight)
 		// Also set the reverse direction for symmetric relations.
 		_ = s.edge.Upsert(ctx, actor.TenantID, actor.UserID, toID, fromID, e.Relation, e.Weight*0.5)
-		// Touch the edge's last_updated.
-		s.edge.Upsert(ctx, actor.TenantID, actor.UserID, fromID, toID, e.Relation, 0) // weight=0 to just update timestamp
-		_ = now                                                                       // suppress unused
 	}
 
 	// Update profile if provided.
@@ -372,10 +430,13 @@ func (s *Service) consolidate(ctx context.Context, actor *authx.Actor) {
 		_ = s.prof.Upsert(ctx, actor.TenantID, actor.UserID, extract.Profile)
 	}
 
-	// Mark turns as consolidated.
-	ids := make([]uint, len(turns))
-	for i, t := range turns {
-		ids[i] = t.ID
+	// Advance the watermark past exactly the turns we just extracted. Turns
+	// appended while the LLM was in flight stay pending for the next pass.
+	if err := s.store.MarkConsolidated(ctx, actor.TenantID, actor.UserID, watermark); err != nil {
+		zap.L().Warn("[memory] advance consolidation watermark failed",
+			zap.Uint("tenant_id", actor.TenantID),
+			zap.Uint("user_id", actor.UserID),
+			zap.Error(err),
+		)
 	}
-	_ = s.mem.MarkConsolidated(ids)
 }

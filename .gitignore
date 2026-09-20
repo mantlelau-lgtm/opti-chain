@@ -14,6 +14,9 @@ scm-mcp
 # Runtime user uploads (default ./uploads)
 uploads/
 
+# Assistant conversation history (JSONL, default ./data/assistant-memory)
+data/
+
 # Frontend
 web/node_modules/
 web/dist/

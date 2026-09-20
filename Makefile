@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint clean restart
+.PHONY: build test vet fmt lint clean restart migrate-memory
 
 # 编译后端和前端
 build:
@@ -26,6 +26,13 @@ fmt:
 # 整理依赖
 tidy:
 	go mod tidy
+
+# 一次性迁移：把 sys_assistant_memory 表里的历史对话导出为 JSONL 并清空该表
+# 需先停服；加 ARGS="-dry-run" 可只导出不清表
+# 与 restart.sh 一致地加载 .env，否则会连到默认的 sqlite 而不是真实数据库
+migrate-memory:
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	go run ./cmd/migrate-memory $(ARGS)
 
 # 一键重启
 restart:

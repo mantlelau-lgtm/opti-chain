@@ -64,7 +64,6 @@ func main() {
 	approvalTaskRepo := repository.NewApprovalTaskRepo(gdb)
 	logisticsRepo := repository.NewLogisticsRepo(gdb)
 	apiKeyRepo := repository.NewApiKeyRepo(gdb)
-	memRepo := repository.NewAssistantMemoryRepo(gdb)
 	memNodeRepo := repository.NewMemoryNodeRepo(gdb)
 	memEdgeRepo := repository.NewMemoryEdgeRepo(gdb)
 	memProfRepo := repository.NewMemoryProfileRepo(gdb)
@@ -159,12 +158,19 @@ func main() {
 		DB:       db.DB,
 	})
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo, cfg.Auth.JWTSecret)
-	memorySvc := memory.NewService(memRepo, memNodeRepo, memEdgeRepo, memProfRepo,
+	// Conversation history is stored as JSONL under cfg.Memory.DataDir; only
+	// the long-term knowledge graph is backed by the database.
+	if err := os.MkdirAll(cfg.Memory.DataDir, 0o755); err != nil {
+		zap.L().Fatal("memory data dir", zap.String("dir", cfg.Memory.DataDir), zap.Error(err))
+	}
+	memorySvc := memory.NewService(
+		memory.NewJSONLStore(cfg.Memory.DataDir, cfg.Memory.MaxFileBytes),
+		memNodeRepo, memEdgeRepo, memProfRepo,
 		llmclient.New(cfg.LLM.URL, cfg.LLM.Model, cfg.LLM.Key),
 		memory.Config{
-			WindowSize:          10,
-			ConsolidateInterval: 5,
-			ShortTermKeepTurns:  100, // per-user turn cap; old turns auto-trimmed
+			WindowSize:          cfg.Memory.WindowSize,          // turns fed to the LLM
+			HistoryLimit:        cfg.Memory.HistoryLimit,        // turns replayed in the UI
+			ConsolidateInterval: cfg.Memory.ConsolidateInterval, // turns before extraction
 			Decay: memory.DecayConfig{
 				Interval:      24 * time.Hour, // 0 = default (24h); negative = disable
 				OlderThanDays: 7,              // edges not touched for ≥1 week decay

@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -313,6 +314,9 @@ func (h *AssistantHandler) GetHistory(c *gin.Context) {
 		response.OK(c, gin.H{"history": []any{}})
 		return
 	}
-	result := h.memory.Retrieve(c.Request.Context(), actor)
-	response.OK(c, gin.H{"history": result.ShortTerm})
+	// Optional ?limit=N caps the replay window; absent/invalid falls back to
+	// the configured default. History is read straight from the JSONL log, so
+	// the UI is no longer bounded by the LLM context window.
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	response.OK(c, gin.H{"history": h.memory.History(c.Request.Context(), actor, limit)})
 }

@@ -58,6 +58,7 @@ func allModels() []interface{} {
 		&model.Material{},
 		&model.Supplier{},
 		&model.Warehouse{},
+		&model.Location{},
 		&model.PurchaseOrder{},
 		&model.PurchaseOrderDetail{},
 		&model.PurchaseReceipt{},
@@ -89,11 +90,10 @@ func allModels() []interface{} {
 		&model.ApprovalTask{},
 		&model.ApprovalTaskMember{},
 		&model.ApiKey{},
-		&model.AssistantMemory{},
 		&model.MemoryNode{},
 		&model.MemoryEdge{},
-		&model.MemoryProfile{},model.MemoryProfile{},
-		&model.MemoryProfile{},model.LogisticsQuery{},
+		&model.MemoryProfile{},
+		&model.LogisticsQuery{},
 	}
 }
 
